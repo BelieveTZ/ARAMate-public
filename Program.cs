@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -14,6 +14,18 @@ namespace ConfidenceDesktop {
     static class Program {
         [DllImport("user32.dll")] static extern bool AllowSetForegroundWindow(int processId);
         [STAThread] static void Main(string[] args) {
+            if(args.Length>0&&args[0]=="--build-gain-board"){
+                try{
+                    if(args.Length!=3)throw new ArgumentException("Usage: --build-gain-board <website-data-directory> <output-file>");
+                    string root=Path.GetFullPath(args[1]);
+                    if(!File.Exists(Path.Combine(root,"website-state.json")))throw new InvalidDataException("Website data is missing; sync data before building gain boards.");
+                    var data=new DataStore();data.Load(root);
+                    if(!data.Heroes.Any(h=>h.Id>0))throw new InvalidDataException("Website data has no heroes.");
+                    var boards=data.CalculateGainBoards();GainBoardCache.WriteFile(args[2],data.GainBoardKey,boards);
+                    Console.WriteLine("PASS gain boards rows="+boards.Single.Count+"/"+boards.Combination.Count+" key="+data.GainBoardKey+" output="+Path.GetFullPath(args[2]));
+                }catch(Exception error){Environment.ExitCode=1;Console.Error.WriteLine("Gain board build failed: "+error.GetBaseException().Message);}
+                return;
+            }
             if(args.Length>0&&args[0]=="--sync-data") {
                 string log=null;
                 try {
@@ -119,12 +131,12 @@ namespace ConfidenceDesktop {
         readonly Task<DataStore> startupData;
         bool startupApplied;
         async Task ApplyStartupData(){
-            if(startupData!=null){loading=true;try{var loaded=await startupData;if(IsDisposed)return;data=loaded;heroes.DataSource=data.Heroes;heroes.SelectedItem=data.Heroes.FirstOrDefault(h=>h.Id==0)??data.Heroes[0];}catch(Exception e){if(!IsDisposed)status.Text="尚无完整网站数据，请联网后重新打开程序。"+e.Message;}finally{loading=false;}if(IsDisposed)return;await LoadGroupsAsync();}
+            if(startupData!=null){loading=true;try{var loaded=await startupData;if(IsDisposed)return;data=loaded;PrepareWebGainBoards();heroes.DataSource=data.Heroes;heroes.SelectedItem=data.Heroes.FirstOrDefault(h=>h.Id==0)??data.Heroes[0];}catch(Exception e){if(!IsDisposed)status.Text="尚无完整网站数据，请联网后重新打开程序。"+e.Message;}finally{loading=false;}if(IsDisposed)return;await LoadGroupsAsync();}
             startupApplied=true;FillWebIcons();if(webReady)PublishWeb();
             if(StartupTrace.ForceClassic){RestoreClassic("网页界面暂时不可用，已恢复基础界面。");StartupTrace.Mark("classic-visible-rows-"+grid.Rows.Count);}
         }
         public MainForm() {
-            if(File.Exists(Path.Combine(DataStore.DefaultRoot,"website-state.json")))startupData=Task.Run(()=>{WebsiteData.PruneSnapshots(DataStore.DefaultRoot);var loaded=new DataStore();loaded.Load(DataStore.DefaultRoot);StartupTrace.Mark("data-loaded");return loaded;});
+            if(File.Exists(Path.Combine(DataStore.DefaultRoot,"website-state.json")))startupData=Task.Run(()=>{WebsiteData.PruneSnapshots(DataStore.DefaultRoot);var loaded=new DataStore();loaded.Load(DataStore.DefaultRoot);loaded.PrepareGainBoardsAsync();StartupTrace.Mark("data-loaded");return loaded;});
             HandleCreated+=(s,e)=>StartupTrace.Mark("handle-created");
             Shown+=(s,e)=>{StartupTrace.Mark("shown");if(StartupTrace.Enabled){var timeout=new Timer{Interval=StartupTrace.TimeoutDelay};timeout.Tick+=(a,b)=>{timeout.Stop();if(StartupTrace.HasRendered)return;StartupTrace.Mark("timeout");exitRequested=true;Close();};timeout.Start();FormClosed+=(a,b)=>timeout.Dispose();}};
             Icon=System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath);InitializeTray();
@@ -218,7 +230,7 @@ namespace ConfidenceDesktop {
             }finally{updating=false;if(!IsDisposed&&!Disposing){checkDataButton.Enabled=true;checkDataButton.Text="检查数据更新";searchTip.SetToolTip(checkDataButton,"检查数据源版本，有更新时可手动同步。");if(overlay!=null)overlay.Enabled=data.Heroes.Count>0;}}
         }
         async void ReloadAfterFailure(){if(await Task.Run(()=>WebsiteData.Verify(DataStore.DefaultRoot)))await ReloadAsync();FillWebIcons();}
-        async Task ReloadAsync(bool propagateErrors=false){int id=SelectedHero==null?0:SelectedHero.Id;loading=true;try{var loaded=await Task.Run(()=>{var store=new DataStore();store.Load(DataStore.DefaultRoot);return store;});if(IsDisposed)return;StartupTrace.Mark("data-loaded");data=loaded;heroes.DataSource=data.Heroes;heroes.SelectedItem=data.Heroes.FirstOrDefault(h=>h.Id==id)??data.Heroes[0];}catch(Exception e){status.Text="尚无完整网站数据，请联网后重新打开程序。"+e.Message;if(propagateErrors)throw;}finally{loading=false;}if(propagateErrors)await LoadGroupsAsync();else LoadGroups();}
+        async Task ReloadAsync(bool propagateErrors=false){int id=SelectedHero==null?0:SelectedHero.Id;loading=true;try{var loaded=await Task.Run(()=>{var store=new DataStore();store.Load(DataStore.DefaultRoot);store.PrepareGainBoardsAsync();return store;});if(IsDisposed)return;StartupTrace.Mark("data-loaded");data=loaded;PrepareWebGainBoards();heroes.DataSource=data.Heroes;heroes.SelectedItem=data.Heroes.FirstOrDefault(h=>h.Id==id)??data.Heroes[0];}catch(Exception e){status.Text="尚无完整网站数据，请联网后重新打开程序。"+e.Message;if(propagateErrors)throw;}finally{loading=false;}if(propagateErrors)await LoadGroupsAsync();else LoadGroups();}
         static string ShortName(string name){int at=name.LastIndexOf(" · ",StringComparison.Ordinal);return at<0?name:name.Substring(at+3);}
         static string Percent(double value){return double.IsNaN(value)?"—":(value*100).ToString("F1")+"%";}
         int loadGeneration;

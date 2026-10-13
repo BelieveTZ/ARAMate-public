@@ -4,5 +4,6 @@
 *.pdb
 obj/
 bin/
+gain-board.json
 public/
 网站数据/

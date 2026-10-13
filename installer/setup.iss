@@ -57,6 +57,7 @@ Source: "MicrosoftEdgeWebview2Setup.exe"; Flags: dontcopy
 Source: "..\lib\*.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\lib\WebView2-LICENSE.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#AppBinary}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\gain-board.json"; DestDir: "{app}"; Flags: ignoreversion
 #ifdef PublicRelease
 Source: "payload\设置游戏目录.exe"; DestDir: "{app}"; Flags: ignoreversion
 #else

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -24,6 +24,11 @@ namespace ConfidenceDesktop {
             watchedGainBoard=task;
             try{await task;}catch(Exception){}
             if(!IsDisposed&&!Disposing&&watchedGainBoard==task)ScheduleWeb();
+        }
+        async void PrepareWebGainBoards(){
+            var store=data;
+            try{await store.PrepareGainBoardsAsync();}catch(Exception){}
+            if(!IsDisposed&&!Disposing&&ReferenceEquals(data,store))ScheduleWeb();
         }
         internal string WebState(){
             bool home=SelectedHero==null||SelectedHero.Id==0;
@@ -172,7 +177,7 @@ namespace ConfidenceDesktop {
                     finally{timer.Stop();}
                 }
                 if(IsDisposed||Disposing)return;SetWebUpdate("loading");
-                await ReloadAsync(true);if(IsDisposed||Disposing)return;await FillWebIconsAsync();if(IsDisposed||Disposing)return;source.Text="程序版本："+AppVersion.Display+"　游戏版本："+data.Version+"　大数据更新日期："+data.Date;SetWebUpdate("updated");
+                await ReloadAsync(true);PrepareWebGainBoards();if(IsDisposed||Disposing)return;await FillWebIconsAsync();if(IsDisposed||Disposing)return;source.Text="程序版本："+AppVersion.Display+"　游戏版本："+data.Version+"　大数据更新日期："+data.Date;SetWebUpdate("updated");
             }catch(Exception){if(!IsDisposed&&!Disposing)SetWebUpdate(syncing?"syncFailed":"checkFailed");}
             finally{updating=false;if(!IsDisposed&&!Disposing){checkDataButton.Enabled=true;SetWebUpdate(webUpdatePhase,webUpdateProgress);if(overlay!=null)overlay.Enabled=data.Heroes.Count>0;}}
         }

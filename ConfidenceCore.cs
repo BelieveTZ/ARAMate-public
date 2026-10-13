@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
@@ -199,38 +199,53 @@ namespace ConfidenceDesktop {
     public class DataStore {
         public const double AugmentGainBoardThreshold=.08;
         public const double AugmentGainBoardMinRate=.60,CombinationGainBoardMinRate=.65,CombinationGainBoardMinGain=.10,CombinationGainBoardMinSecondaryGain=.02;
+        readonly string gainBoardCacheDirectory;
+        readonly string gainBoardBundledFile;
+        Task<GainBoards> gainBoards;
         Task<IReadOnlyList<AugmentGainEntry>> augmentGainBoard,combinationGainBoard;
-        public Task<IReadOnlyList<AugmentGainEntry>> AugmentGainBoardAsync(){return GainBoardAsync(false);}
-        public Task<IReadOnlyList<AugmentGainEntry>> CombinationGainBoardAsync(){return GainBoardAsync(true);}
-        Task<IReadOnlyList<AugmentGainEntry>> GainBoardAsync(bool combination){
+        public Action GainBoardHeroComputed;
+        public DataStore():this(null){}
+        public DataStore(string cacheDirectory,string bundledFile=null){gainBoardCacheDirectory=cacheDirectory??AppVersion.LocalDataDirectory;gainBoardBundledFile=bundledFile??Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"gain-board.json");}
+        // versionKey survives local snapshot-directory collisions during repair downloads.
+        public string GainBoardKey {get{string versionKey=Json.Str(Json.Get(State,"versionKey"));return GainBoardCache.Key(string.IsNullOrEmpty(versionKey)?Fingerprint:SafeHash(versionKey));}}
+        public Task<IReadOnlyList<AugmentGainEntry>> AugmentGainBoardAsync(){lock(cacheLock){PrepareGainBoardsAsync();return augmentGainBoard;}}
+        public Task<IReadOnlyList<AugmentGainEntry>> CombinationGainBoardAsync(){lock(cacheLock){PrepareGainBoardsAsync();return combinationGainBoard;}}
+        public Task<GainBoards> PrepareGainBoardsAsync(){
             lock(cacheLock){
-                var cached=combination?combinationGainBoard:augmentGainBoard;if(cached!=null)return cached;
-                var snapshot=new DataStore{Root=Root,StatsRoot=StatsRoot,ResourceRoot=ResourceRoot,Version=Version,Date=Date,Fingerprint=Fingerprint,
-                    Resources=new Dictionary<string,Dictionary<string,object>>(Resources),Heroes=new List<Hero>(Heroes)};
-                var task=Task.Run<IReadOnlyList<AugmentGainEntry>>(()=>{
-                    var entries=new List<AugmentGainEntry>();
-                    foreach(var hero in snapshot.Heroes.Where(h=>h.Id>0)){
-                        var overall=snapshot.AugmentGroups(hero.Id,"high").FirstOrDefault(g=>g.Path==(combination?"champions/augmentCombinations":"champions/augments/all"));
-                        if(overall==null)continue;
-                        var raw=combination?snapshot.ReadHero(hero.Id,"high"):null;
-                        foreach(var row in overall.Rows.Where(r=>r.GainLower>=(combination?CombinationGainBoardMinGain:AugmentGainBoardThreshold)&&r.Lower>=(combination?CombinationGainBoardMinRate:AugmentGainBoardMinRate))){
-                            if(combination){
-                                double secondary=CombinationShopBuilds.SecondaryGain(snapshot,raw,row.Raw);if(!(secondary>=CombinationGainBoardMinSecondaryGain))continue;
-                                var ids=CombinationShopBuilds.DisplayOrder(snapshot,raw,Json.Arr(Json.Get(row.Raw,"augmentIds")).Select(Json.Str).ToArray());
-                                entries.Add(new AugmentGainEntry(hero.Id,HeroNames.Title(hero.Name),HeroNames.Name(hero.Name),WebsiteData.ImageIcon(snapshot,"champions",id:hero.Id.ToString()),
-                                    string.Join("-",ids),row.Name,null,"",row.Count,row.Lower,row.GainLower,ids,secondary));continue;
-                            }
-                            string id=Json.Str(Json.Get(row.Raw,"id")??Json.Get(row.Raw,"augmentId"));object resource;
-                            snapshot.Resources["augments"].TryGetValue(id,out resource);
-                            entries.Add(new AugmentGainEntry(hero.Id,HeroNames.Title(hero.Name),HeroNames.Name(hero.Name),WebsiteData.ImageIcon(snapshot,"champions",id:hero.Id.ToString()),
-                                id,row.Name,WebsiteData.ImageIcon(snapshot,"augments",id:id),Json.Str(Json.Get(resource,"rarity")),row.Count,row.Lower,row.GainLower));
-                        }
-                    }
-                    return entries.OrderByDescending(e=>e.GainLower).ThenByDescending(e=>e.Lower).ThenBy(e=>e.HeroName,StringComparer.CurrentCulture).ThenBy(e=>e.AugmentId,StringComparer.Ordinal).ToList().AsReadOnly();
-                });
-                if(combination)combinationGainBoard=task;else augmentGainBoard=task;return task;
+                if(gainBoards!=null)return gainBoards;
+                var snapshot=new DataStore(gainBoardCacheDirectory,gainBoardBundledFile){Root=Root,StatsRoot=StatsRoot,ResourceRoot=ResourceRoot,Version=Version,Date=Date,Fingerprint=Fingerprint,State=State,
+                    Resources=new Dictionary<string,Dictionary<string,object>>(Resources),Heroes=new List<Hero>(Heroes),GainBoardHeroComputed=GainBoardHeroComputed};
+                string key=GainBoardKey;
+                gainBoards=Task.Run(()=>snapshot.Heroes.All(h=>h.Id<=0)?new GainBoards(new List<AugmentGainEntry>().AsReadOnly(),new List<AugmentGainEntry>().AsReadOnly()):
+                    GainBoardCache.LoadOrCompute(gainBoardCacheDirectory,key,()=>snapshot.CalculateGainBoards(),gainBoardBundledFile));
+                augmentGainBoard=SelectGainBoard(gainBoards,false);combinationGainBoard=SelectGainBoard(gainBoards,true);return gainBoards;
             }
         }
+        static async Task<IReadOnlyList<AugmentGainEntry>> SelectGainBoard(Task<GainBoards> task,bool combination){var boards=await task.ConfigureAwait(false);return combination?boards.Combination:boards.Single;}
+        internal GainBoards CalculateGainBoards(){
+            var single=new List<AugmentGainEntry>();var combinations=new List<AugmentGainEntry>();
+            foreach(var hero in Heroes.Where(h=>h.Id>0))foreach(bool combination in new[]{false,true}){
+                var entries=combination?combinations:single;
+                if(GainBoardHeroComputed!=null)GainBoardHeroComputed();
+                var overall=AugmentGroups(hero.Id,"high").FirstOrDefault(g=>g.Path==(combination?"champions/augmentCombinations":"champions/augments/all"));
+                if(overall==null)continue;
+                var raw=combination?ReadHero(hero.Id,"high"):null;
+                foreach(var row in overall.Rows.Where(r=>r.GainLower>=(combination?CombinationGainBoardMinGain:AugmentGainBoardThreshold)&&r.Lower>=(combination?CombinationGainBoardMinRate:AugmentGainBoardMinRate))){
+                    if(combination){
+                        double secondary=CombinationShopBuilds.SecondaryGain(this,raw,row.Raw);if(!(secondary>=CombinationGainBoardMinSecondaryGain))continue;
+                        var ids=CombinationShopBuilds.DisplayOrder(this,raw,Json.Arr(Json.Get(row.Raw,"augmentIds")).Select(Json.Str).ToArray());
+                        entries.Add(new AugmentGainEntry(hero.Id,HeroNames.Title(hero.Name),HeroNames.Name(hero.Name),WebsiteData.ImageIcon(this,"champions",id:hero.Id.ToString()),
+                            string.Join("-",ids),row.Name,null,"",row.Count,row.Lower,row.GainLower,ids,secondary));continue;
+                    }
+                    string id=Json.Str(Json.Get(row.Raw,"id")??Json.Get(row.Raw,"augmentId"));object resource;
+                    Resources["augments"].TryGetValue(id,out resource);
+                    entries.Add(new AugmentGainEntry(hero.Id,HeroNames.Title(hero.Name),HeroNames.Name(hero.Name),WebsiteData.ImageIcon(this,"champions",id:hero.Id.ToString()),
+                        id,row.Name,WebsiteData.ImageIcon(this,"augments",id:id),Json.Str(Json.Get(resource,"rarity")),row.Count,row.Lower,row.GainLower));
+                }
+            }
+            return new GainBoards(SortGainBoard(single),SortGainBoard(combinations));
+        }
+        static IReadOnlyList<AugmentGainEntry> SortGainBoard(List<AugmentGainEntry> entries){return entries.OrderByDescending(e=>e.GainLower).ThenByDescending(e=>e.Lower).ThenBy(e=>e.HeroName,StringComparer.CurrentCulture).ThenBy(e=>e.AugmentId,StringComparer.Ordinal).ToList().AsReadOnly();}
         const int HeroCacheCapacity=8;
         sealed class HeroData {
             internal readonly object Sync=new object();
@@ -259,7 +274,7 @@ namespace ConfidenceDesktop {
         public static string Word(string x){return Words.ContainsKey(x)?Words[x]:x;}
         public static string SafeHash(object v) {string h=Json.Str(v);if(!Regex.IsMatch(h,"^[a-fA-F0-9]{64}$"))throw new InvalidDataException("数据索引中的散列无效");return h;}
         public void Load(string root) {
-            lock(cacheLock){augmentGainBoard=null;combinationGainBoard=null;heroCache.Clear();boardCache.Clear();boardRanks.Clear();recentHeroes.Clear();}Root=Path.GetFullPath(root);
+            lock(cacheLock){gainBoards=null;augmentGainBoard=null;combinationGainBoard=null;heroCache.Clear();boardCache.Clear();boardRanks.Clear();recentHeroes.Clear();}Root=Path.GetFullPath(root);
             if(!File.Exists(Path.Combine(Root,"website-state.json"))){State=new Dictionary<string,object>();Resources.Clear();Heroes=new List<Hero>();Version=Date=Fingerprint="";StatsRoot=Path.Combine(Root,"stats");ResourceRoot=Path.Combine(Root,"resources");return;}
             State=Json.Obj(Json.Read(Path.Combine(Root,"website-state.json")));
             Version=Json.Str(Json.Get(State,"gameVersion"));Date=Json.Str(Json.Get(State,"dataDate"));
