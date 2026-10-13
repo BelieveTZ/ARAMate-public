@@ -237,8 +237,8 @@ namespace ConfidenceDesktop {
         }
     }
     public class DataStore {
-        public const double AugmentGainBoardThreshold=.08;
-        public const double AugmentGainBoardMinRate=.60,CombinationGainBoardMinRate=.65,CombinationGainBoardMinGain=.10,CombinationGainBoardMinSecondaryGain=.02;
+        public const double AugmentGainBoardThreshold=.10;
+        public const double CombinationGainBoardMinGain=.15,CombinationGainBoardMinSecondaryGain=.02;
         readonly string gainBoardCacheDirectory;
         readonly string gainBoardBundledFile;
         Task<GainBoards> gainBoards;
@@ -270,7 +270,7 @@ namespace ConfidenceDesktop {
                 var overall=AugmentGroups(hero.Id,"high").FirstOrDefault(g=>g.Path==(combination?"champions/augmentCombinations":"champions/augments/all"));
                 if(overall==null)continue;
                 var raw=combination?ReadHero(hero.Id,"high"):null;
-                foreach(var row in overall.Rows.Where(r=>r.GainLower>=(combination?CombinationGainBoardMinGain:AugmentGainBoardThreshold)&&r.Lower>=(combination?CombinationGainBoardMinRate:AugmentGainBoardMinRate))){
+                foreach(var row in overall.Rows.Where(r=>r.GainLower>=(combination?CombinationGainBoardMinGain:AugmentGainBoardThreshold))){
                     if(combination){
                         double secondary=CombinationShopBuilds.SecondaryGain(this,raw,row.Raw);if(!(secondary>=CombinationGainBoardMinSecondaryGain))continue;
                         var ids=CombinationShopBuilds.DisplayOrder(this,raw,Json.Arr(Json.Get(row.Raw,"augmentIds")).Select(Json.Str).ToArray());

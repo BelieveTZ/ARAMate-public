@@ -14,7 +14,7 @@ namespace ConfidenceDesktop {
     }
     public static class GainBoardCache {
         // Increment whenever board thresholds, calculation or display ordering changes.
-        public const string CalculationVersion="2";
+        public const string CalculationVersion="3";
         public static string Key(string snapshot,string version=AppVersion.Number,string calculation=CalculationVersion){return snapshot+"|"+version+"|"+calculation;}
         public static string FilePath(string directory){return Path.Combine(directory,"cache","gain-board.json");}
         public static GainBoards LoadOrCompute(string directory,string key,Func<GainBoards> compute,string bundledFile=null){
@@ -45,7 +45,7 @@ namespace ConfidenceDesktop {
                 var ids=Required(row,"augmentIds") as object[];if(ids==null||ids.Length!=(combination?2:1)||ids.Any(valueId=>!(valueId is string)||((string)valueId).Length==0))throw new InvalidDataException("augmentIds");
                 string id=Text(row,"augmentId");if(id!=string.Join("-",ids.Cast<string>()))throw new InvalidDataException("augmentId");
                 double count=Number(row,"count"),lower=Number(row,"lower"),gain=Number(row,"gain"),secondary=Number(row,"secondary",!combination);
-                if(count<=0||count!=Math.Floor(count)||lower>1||lower<(combination?DataStore.CombinationGainBoardMinRate:DataStore.AugmentGainBoardMinRate)||gain<(combination?DataStore.CombinationGainBoardMinGain:DataStore.AugmentGainBoardThreshold)||gain>1||(combination&&secondary<DataStore.CombinationGainBoardMinSecondaryGain))throw new InvalidDataException("statistics");
+                if(count<=0||count!=Math.Floor(count)||lower>1||lower<0||gain<(combination?DataStore.CombinationGainBoardMinGain:DataStore.AugmentGainBoardThreshold)||gain>1||(combination&&secondary<DataStore.CombinationGainBoardMinSecondaryGain))throw new InvalidDataException("statistics");
                 rows.Add(new AugmentGainEntry((int)hero,Text(row,"heroTitle"),Text(row,"heroName"),Text(row,"heroIcon",true),id,Text(row,"augmentName"),Text(row,"augmentIcon",true),Text(row,"rarity"),count,lower,gain,ids.Cast<string>().ToArray(),secondary));
             }
             return rows.AsReadOnly();

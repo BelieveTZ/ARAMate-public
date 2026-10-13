@@ -37,13 +37,13 @@ namespace ConfidenceDesktop {
             bool combination=webGainView=="combination";
             var task=combination?data.CombinationGainBoardAsync():data.AugmentGainBoardAsync();if(watchedGainBoard!=task)WatchGainBoard(task);
             state["group"]=combination?"combination-gain-board":"augment-gain-board";
-            state["columns"]=(combination?new[]{"名次","英雄","组合","统计学胜率","统计学胜率提升"}:new[]{"名次","英雄","海克斯","统计学胜率","统计学胜率提升"}).Select((text,index)=>new{text=text,index=index}).ToArray();
+            state["columns"]=(combination?new[]{"名次","英雄","组合","统计学胜率提升","统计学胜率"}:new[]{"名次","英雄","海克斯","统计学胜率提升","统计学胜率"}).Select((text,index)=>new{text=text,index=index}).ToArray();
             state["empty"]=task.IsFaulted?"统计失败，请重新载入数据":task.IsCompleted?"暂无达标海克斯":"正在统计…";
             state["rows"]=task.Status==TaskStatus.RanToCompletion?task.Result.Select((entry,index)=>new{
                 heroId=entry.HeroId,title=entry.HeroTitle,name=entry.HeroName,icon=entry.HeroIcon,augmentId=entry.AugmentId,augmentIds=entry.AugmentIds,rarity=entry.Rarity,
                 cells=new[]{WebCell(Cell((index+1).ToString())),WebCell(Cell(entry.HeroName)),WebCell(Cell(entry.AugmentName,"augments",bold:true,iconId:combination?null:entry.AugmentId)),
-                    WebCell(Cell(Statistics.Pct(entry.Lower),color:BadgePaint.RateColor(entry.Lower))),
-                    WebCell(Cell(Statistics.GainText(entry.GainLower),color:BadgePaint.RateColor(.5+entry.GainLower)))}
+                    WebCell(Cell(Statistics.GainText(entry.GainLower),color:BadgePaint.RateColor(.5+entry.GainLower))),
+                    WebCell(Cell(Statistics.Pct(entry.Lower),color:BadgePaint.RateColor(entry.Lower)))}
             }).ToArray():(object)new object[0];
             state["icons"]=WebIcons();
             return Json.Write(state);
