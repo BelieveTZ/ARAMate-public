@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
@@ -56,7 +56,7 @@ namespace ConfidenceDesktop {
         }
         IEnumerable<DisplayRow> EquipmentRows(Group group,bool plans,bool synergy){
             foreach(var row in group.Rows.Where(r=>plans||synergy||r.Name==(laterFlow.SelectedItem as string))){
-                Color color=synergy?BadgePaint.RateColor(row.Lower):row.ShoeAdvice=="X"?Color.FromArgb(137,156,174):row.ShoeAdvice=="S"?Color.Gold:row.ShoeAdvice=="A"?Color.FromArgb(192,112,255):row.ShoeAdvice=="B"?Color.FromArgb(75,156,255):Color.FromArgb(80,190,110);
+                Color color=synergy?BadgePaint.RateColor(row.Lower):row.ShoeAdvice=="X"?ThemeManager.Current["source-text"]:row.ShoeAdvice=="S"?Color.Gold:row.ShoeAdvice=="A"?Color.FromArgb(192,112,255):row.ShoeAdvice=="B"?Color.FromArgb(75,156,255):Color.FromArgb(80,190,110);
                 yield return new DisplayRow{Source=row,Cells=new[]{
                     Cell(plans||synergy?row.Name:row.ShoeAdvice,(plans||synergy)&&row.Name!="★常规"?"augments":null,color:plans||synergy?default(Color):color,tooltip:(plans||synergy)&&row.Name!="★常规"?row.Name:null,bold:!plans&&!synergy),
                     Cell(row.StarterName,"items",tooltip:row.StarterName),

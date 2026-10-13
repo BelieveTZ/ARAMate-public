@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -8,7 +8,7 @@ using System.Linq;
 namespace ConfidenceDesktop {
     public static class BadgePaint {
         public static readonly Color TransparentColor=Color.Black;
-        public static readonly Color Gold=DesktopTheme.Accent;
+        public static Color Gold {get{return DesktopTheme.Accent;}}
         public static readonly Color Jade=Color.FromArgb(0,182,159);
 
         public static string SkillPickText(double pick){
@@ -16,7 +16,7 @@ namespace ConfidenceDesktop {
         }
         public static Color RateColor(double value){
             if(double.IsNaN(value))return DesktopTheme.Muted;
-            var red=Color.FromArgb(230,92,100);var yellow=DesktopTheme.Accent;var green=Jade;
+            var red=Color.FromArgb(230,92,100);var yellow=ThemePalette.Piltover["gold"];var green=Jade;
             double t=Math.Max(0,Math.Min(1,(value-.45)/.10));var from=t<=.5?red:yellow;var to=t<=.5?yellow:green;
             double weight=t<=.5?t*2:(t-.5)*2;
             return Color.FromArgb((int)Math.Round(from.R+(to.R-from.R)*weight),(int)Math.Round(from.G+(to.G-from.G)*weight),(int)Math.Round(from.B+(to.B-from.B)*weight));
@@ -92,13 +92,13 @@ namespace ConfidenceDesktop {
             using(var format=new StringFormat(StringFormat.GenericTypographic)){format.Alignment=align;format.LineAlignment=StringAlignment.Center;format.FormatFlags|=StringFormatFlags.NoWrap;
                 using(var path=new GraphicsPath()){
                     path.AddString(text??"",font.FontFamily,(int)font.Style,font.Size,area,format);
-                    using(var outline=new Pen(Color.FromArgb(235,6,10,14),Math.Max(1,font.Size/13f)){LineJoin=LineJoin.Round}){outline.LineJoin=LineJoin.Round;g.DrawPath(outline,path);}
+                    using(var outline=new Pen(Color.FromArgb(235,ThemeManager.Current["outline"]),Math.Max(1,font.Size/13f)){LineJoin=LineJoin.Round}){outline.LineJoin=LineJoin.Round;g.DrawPath(outline,path);}
                     using(var brush=new SolidBrush(color))g.FillPath(brush,path);
                 }
             }
         }
         static void ArcOutlinedText(Graphics g,string text,Font font,Color color,RectangleF area,CardResult card,Rectangle bounds){
-            using(var path=new GraphicsPath())using(var format=new StringFormat(StringFormat.GenericTypographic))using(var outline=new Pen(Color.FromArgb(235,6,10,14),Math.Max(1,font.Size/13f)){LineJoin=LineJoin.Round}){
+            using(var path=new GraphicsPath())using(var format=new StringFormat(StringFormat.GenericTypographic))using(var outline=new Pen(Color.FromArgb(235,ThemeManager.Current["outline"]),Math.Max(1,font.Size/13f)){LineJoin=LineJoin.Round}){
                 format.Alignment=StringAlignment.Center;format.LineAlignment=StringAlignment.Center;format.FormatFlags|=StringFormatFlags.NoWrap;path.AddString(text,font.FontFamily,(int)font.Style,font.Size,area,format);
                 var ink=path.GetBounds();ink.Inflate(outline.Width/2,outline.Width/2);double globalY=(ink.Top+ink.Bottom)/2+card.Bounds.Y-bounds.Y;
                 float target=(float)(SelectionMatcher.PosterEdgeX(card,globalY)-card.ArcDepth*8/58)+bounds.X-card.Bounds.X;
@@ -123,7 +123,7 @@ namespace ConfidenceDesktop {
             }
         }
         static void BenchOutlinedText(Graphics g,string text,Font font,Color color,RectangleF area,StringAlignment align){
-            using(var path=new GraphicsPath())using(var format=new StringFormat(StringFormat.GenericTypographic))using(var outline=new Pen(Color.FromArgb(235,6,10,14),Math.Max(1,font.Size/13f)){LineJoin=LineJoin.Round}){
+            using(var path=new GraphicsPath())using(var format=new StringFormat(StringFormat.GenericTypographic))using(var outline=new Pen(Color.FromArgb(235,ThemeManager.Current["outline"]),Math.Max(1,font.Size/13f)){LineJoin=LineJoin.Round}){
                 format.FormatFlags|=StringFormatFlags.NoWrap;path.AddString(text??"",font.FontFamily,(int)font.Style,font.Size,PointF.Empty,format);var ink=path.GetBounds();ink.Inflate(outline.Width/2,outline.Width/2);
                 float x=align==StringAlignment.Near?area.Left:align==StringAlignment.Far?area.Right-ink.Width:area.Left+(area.Width-ink.Width)/2;
                 using(var move=new Matrix()){move.Translate(x-ink.Left,area.Top+(area.Height-ink.Height)/2-ink.Top);path.Transform(move);}outline.LineJoin=LineJoin.Round;g.DrawPath(outline,path);using(var brush=new SolidBrush(color))g.FillPath(brush,path);

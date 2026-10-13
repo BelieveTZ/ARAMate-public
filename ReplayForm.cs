@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
@@ -16,6 +16,6 @@ namespace ConfidenceDesktop {
             },id=>{},()=>NativeOverlay.GetForegroundWindow()==Handle?new CaptureTarget{Handle=Handle,Bounds=new Rectangle(PointToScreen(Point.Empty),ClientSize)}:null);controller.Enabled=true;}catch(Exception ex){Text="回放失败："+ex.Message;}};
             MouseDown+=(s,e)=>{clicks++;};KeyPreview=true;KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Space){blank=!blank;Invalidate();}};FormClosed+=(s,e)=>{if(controller!=null)controller.Dispose();scene.Dispose();};
         }
-        protected override void OnPaint(PaintEventArgs e){if(blank)e.Graphics.Clear(Color.FromArgb(30,35,40));else if(scene!=null)e.Graphics.DrawImage(scene,ClientRectangle);}
+        protected override void OnPaint(PaintEventArgs e){if(blank)e.Graphics.Clear(ThemeManager.Current["replay"]);else if(scene!=null)e.Graphics.DrawImage(scene,ClientRectangle);}
     }
 }

@@ -331,7 +331,9 @@ namespace ConfidenceDesktop {
         // Defer topmost positioning to Present, which uses SWP_NOACTIVATE.
         readonly bool pixelAlpha;
         public BadgeWindow():this(false){}
-        public BadgeWindow(bool usePixelAlpha){pixelAlpha=usePixelAlpha;StartPosition=FormStartPosition.Manual;FormBorderStyle=FormBorderStyle.None;ShowInTaskbar=false;DoubleBuffered=!pixelAlpha;BackColor=BadgePaint.TransparentColor;if(!pixelAlpha)TransparencyKey=BadgePaint.TransparentColor;Opacity=1;}
+        public BadgeWindow(bool usePixelAlpha){ThemeManager.Changed+=ThemeChanged;pixelAlpha=usePixelAlpha;StartPosition=FormStartPosition.Manual;FormBorderStyle=FormBorderStyle.None;ShowInTaskbar=false;DoubleBuffered=!pixelAlpha;BackColor=BadgePaint.TransparentColor;if(!pixelAlpha)TransparencyKey=BadgePaint.TransparentColor;Opacity=1;}
+        void ThemeChanged(object sender,EventArgs args){if(IsDisposed)return;if(pixelAlpha&&Visible&&Result!=null){using(var bitmap=new Bitmap(Width,Height,System.Drawing.Imaging.PixelFormat.Format32bppPArgb)){using(var graphics=Graphics.FromImage(bitmap)){graphics.Clear(Color.Transparent);BadgePaint.Draw(graphics,ClientRectangle,Result);}NativeOverlay.PresentAlpha(Handle,bitmap,Location);}}else Invalidate();}
+        protected override void Dispose(bool disposing){if(disposing)ThemeManager.Changed-=ThemeChanged;base.Dispose(disposing);}
         protected override bool ShowWithoutActivation {get{return true;}}
         protected override CreateParams CreateParams {get{var p=base.CreateParams;p.ExStyle|=0x08000000|0x00000020|0x00080000|0x00000080;return p;}}
         protected override void WndProc(ref Message message){if(message.Msg==0x84){message.Result=new IntPtr(-1);return;}base.WndProc(ref message);}

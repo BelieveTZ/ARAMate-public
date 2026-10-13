@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -82,8 +82,9 @@ namespace ConfidenceDesktop {
         async void FillWebIcons(){await FillWebIconsAsync();}
         async Task FillWebIconsAsync(){var snapshot=data;if(string.IsNullOrEmpty(snapshot.Root))return;try{var downloaded=await Task.Run(()=>{var tooltip=WebsiteData.FillTooltipIcons(snapshot);var images=WebsiteData.FillImageIcons(snapshot);return tooltip.Downloaded+images.Downloaded;});if(IsDisposed||Disposing||snapshot!=data||downloaded==0)return;webImageRevision++;cachedWebRows=null;lastWebState=null;ScheduleWeb();}catch{}}
         Dictionary<string,string> WebIcons(){var result=new Dictionary<string,string>();foreach(string asset in webIconAssets){string uri;if(!tooltipIconUris.TryGetValue(asset,out uri)){try{string path=WebsiteData.PathUnder(data.Root,asset);if(!File.Exists(path))continue;uri="data:image/"+(asset.EndsWith(".png")?"png":"webp")+";base64,"+Convert.ToBase64String(File.ReadAllBytes(path));tooltipIconUris[asset]=uri;}catch{continue;}}result[asset]=uri;}return result;}
+        static string ThemeCss(string html){return Regex.Replace(html,@":root\{[^}]*\}",":root{color-scheme:dark;"+string.Join(";",ThemeManager.Current.Css().Select(p=>"--"+p.Key+":"+p.Value))+";--teal:#00b69f}",RegexOptions.None);}
         void PrepareWeb(Control layout){
-            classicLayout=layout;layout.Visible=false;BackColor=Color.FromArgb(10,23,32);
+            classicLayout=layout;layout.Visible=false;BackColor=DesktopTheme.Canvas;
             if(StartupTrace.ForceClassic)return;
             webEnvironment=CreateWebEnvironment();
             Load+=(s,e)=>InitializeWeb(layout);
@@ -91,7 +92,7 @@ namespace ConfidenceDesktop {
         async Task<CoreWebView2Environment> CreateWebEnvironment(){return await CoreWebView2Environment.CreateAsync(null,StartupTrace.UserData??Path.Combine(AppVersion.LocalDataDirectory,"界面缓存"));}
         async void InitializeWeb(Control layout) {
             classicLayout=layout;
-            web=new WebView2 {Dock=DockStyle.Fill,DefaultBackgroundColor=Color.FromArgb(10,23,32)};
+            web=new WebView2 {Dock=DockStyle.Fill,DefaultBackgroundColor=DesktopTheme.Canvas};
             Controls.Add(web);web.BringToFront();
             try {
                 var environment=await webEnvironment;
@@ -111,7 +112,7 @@ namespace ConfidenceDesktop {
                 web.CoreWebView2.WebMessageReceived+=WebMessage;
                 web.CoreWebView2.ProcessFailed+=(s,e)=>RestoreClassic("网页界面暂时不可用，已恢复基础界面。");
                 using(var stream=GetType().Assembly.GetManifestResourceStream("WebShell.html"))
-                using(var reader=new StreamReader(stream))web.NavigateToString(reader.ReadToEnd());
+                using(var reader=new StreamReader(stream))web.NavigateToString(ThemeCss(reader.ReadToEnd()));
             } catch(Exception) {RestoreClassic("网页界面未能启动，已恢复基础界面。请确认 Microsoft Edge WebView2 运行时已安装。");}
         }
         void RestoreClassic(string message) {
@@ -153,7 +154,7 @@ namespace ConfidenceDesktop {
                 rows=cachedWebRows,icons=WebIcons(),imageRevision=webImageRevision,
                 empty=data.Heroes.Count==0?WebsiteUpdateStatus.EmptyText(webUpdatePhase):group!=null&&group.Path=="champions/augmentCombinations"?"暂无值得推荐的海克斯组合":emptyRoutes.Text,version=AppVersion.Display,gameVersion=data.Version,date=data.Date,
                 connection=clientStatus==null?"未检测到客户端":ConnectionText(clientStatus,data),updating=updating,updateStatus=WebsiteUpdateStatus.Text(webUpdatePhase,webUpdateManual,data.Version,data.Date,webUpdateProgress),progress=webUpdateProgress,
-                shopStatus=new {kind=shopSession.DisplayKind,count=shopSession.ImportedCount,error=shopSession.Error},autoImportShop=shopSession.AutoImportEnabled,autoMinimize=autoMinimize,skillMode=hudSkillMode.SelectedIndex,closeToTray=minimizeToTray,status=status.Text
+                shopStatus=new {kind=shopSession.DisplayKind,count=shopSession.ImportedCount,error=shopSession.Error},autoImportShop=shopSession.AutoImportEnabled,autoMinimize=autoMinimize,theme=ThemeManager.Current.Id,palette=ThemeManager.Current.Css(),skillMode=hudSkillMode.SelectedIndex,closeToTray=minimizeToTray,status=status.Text
             });
         }
         void PublishWeb() {
@@ -198,6 +199,7 @@ namespace ConfidenceDesktop {
                     case "rarity":if(int.TryParse(value,out number)&&number>=0&&number<4)rarity.SelectedIndex=number;break;
                     case "augmentSearch":augmentSearch.Text=value;break;
                     case "flow":if(int.TryParse(value,out number)&&number>=0&&number<laterFlow.Items.Count)laterFlow.SelectedIndex=number;break;
+                    case "theme":SelectTheme(value);break;
                     case "skillMode":if(int.TryParse(value,out number)&&number>=0&&number<3)hudSkillMode.SelectedIndex=number;break;
                     case "closeMode":minimizeToTray=value=="1";CloseBehaviorSettings.Save(minimizeToTray);break;
                     case "autoImportShop":shopSession.SetAutoImport(value=="1");break;

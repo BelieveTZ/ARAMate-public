@@ -1,7 +1,14 @@
 ﻿using System;using System.Drawing;using System.Drawing.Drawing2D;using System.Windows.Forms;
 namespace ConfidenceDesktop {
  public static class DesktopTheme {
-  public static readonly Color Canvas=Color.FromArgb(10,23,32),Surface=Color.FromArgb(16,35,46),Raised=Color.FromArgb(19,42,54),Line=Color.FromArgb(41,65,78),Text=Color.FromArgb(231,237,245),Muted=Color.FromArgb(148,165,185),Accent=Color.FromArgb(217,187,115),Selected=Color.FromArgb(40,51,50);
+  public static Color Canvas {get{return ThemeManager.Current["bg"];}}
+  public static Color Surface {get{return ThemeManager.Current["panel"];}}
+  public static Color Raised {get{return ThemeManager.Current["header"];}}
+  public static Color Line {get{return ThemeManager.Current["line"];}}
+  public static Color Text {get{return ThemeManager.Current["desktop-text"];}}
+  public static Color Muted {get{return ThemeManager.Current["desktop-muted"];}}
+  public static Color Accent {get{return ThemeManager.Current["gold"];}}
+  public static Color Selected {get{return ThemeManager.Current["active"];}}
   public static readonly Font Body=new Font("Microsoft YaHei UI",10),Strong=new Font("Microsoft YaHei UI",10,FontStyle.Bold),Title=new Font("Microsoft YaHei UI",13,FontStyle.Bold),Small=new Font("Microsoft YaHei UI",9);
   public static GraphicsPath Rounded(Rectangle bounds,int radius){var p=new GraphicsPath();int d=Math.Min(radius*2,Math.Min(bounds.Width,bounds.Height));if(d<2){p.AddRectangle(bounds);return p;}p.AddArc(bounds.Left,bounds.Top,d,d,180,90);p.AddArc(bounds.Right-d,bounds.Top,d,d,270,90);p.AddArc(bounds.Right-d,bounds.Bottom-d,d,d,0,90);p.AddArc(bounds.Left,bounds.Bottom-d,d,d,90,90);p.CloseFigure();return p;}
   public static void Box(Graphics g,Rectangle bounds,Color fill,Color border,int radius=8){g.SmoothingMode=SmoothingMode.AntiAlias;using(var p=Rounded(bounds,radius)){using(var b=new SolidBrush(fill))g.FillPath(b,p);using(var pen=new Pen(border))g.DrawPath(pen,p);}}
