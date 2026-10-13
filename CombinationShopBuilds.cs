@@ -244,10 +244,10 @@ namespace ConfidenceDesktop {
     var shop=new ShopPlan{Hero=hero,Key=key,Role=ShopBuilds.CombinationRole,Flow=label,Title=title,Gap=double.NaN,Set=set};
     result.Add(new CombinationRecommendation{Shop=shop,Combination=combo,Starter=Json.Arr(Json.Get(choice.Starter,"items")),PurchaseOrder=order.ToArray(),FinalItems=FinalItems(data,order,pair),AugmentIds=pair,MainAugmentId=mainIndex<0?null:pair[mainIndex],Lifts=lifts,SecondaryChanged=changed,Note=note,FallbackReason=fallbackReason,FallbackPlan=fallbackPlan,Label=string.Join(" + ",displayPair.Select(id=>data.Lookup("augments",id))),Fifth=later.Fifth,Sixth=later.Sixth,FifthSecondaryPick=later.FifthPick,SixthSecondaryPick=later.SixthPick,MissingPrimaryRoutePicks=later.MissingRoute,MissingNormalRoutePicks=later.MissingNormal});
    }
-   var ranked=Json.Arr(Json.Get(raw,"augmentCombinations")).Select(combo=>new{
+   var ranked=Json.Arr(Json.Get(raw,"augmentCombinations")).Where(combo=>IsRecommended(data,raw,combo)).Select(combo=>new{
     Row=combo,Plan=new ShopPlan{Key="combo-"+string.Join("-",Json.Arr(Json.Get(combo,"augmentIds")).Select(Json.Str).OrderBy(id=>int.Parse(id))),Set=new Dictionary<string,object>()}
    }).ToList();
-   ShopBuilds.RankPlans(ranked.Select(r=>r.Plan),p=>ranked.First(r=>r.Plan==p).Row,1000);
+   ShopBuilds.RankPlans(ranked.Select(r=>r.Plan),p=>ranked.First(r=>r.Plan==p).Row,raw,1000);
    foreach(var recommendation in result)recommendation.Shop.Set["sortrank"]=ranked.Single(r=>r.Plan.Key==recommendation.Shop.Key).Plan.Set["sortrank"];
    return result;
   }

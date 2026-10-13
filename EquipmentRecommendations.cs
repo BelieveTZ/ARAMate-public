@@ -103,7 +103,7 @@ namespace ConfidenceDesktop {
    return c==null?new List<object>():CoreSequence(c);
   }
   public static string PurchaseLine(DataStore d,RouteChoice c){return c.StarterName+" → "+string.Join(" → ",CorePurchaseSequence(d,c).Select(i=>d.Lookup("items",Json.Get(i,"id"))));}
-  static Row Make(string name,string details,object raw,object baseline,string note){var score=Statistics.Calculate(raw);return new Row{Name=name,StarterName=details,Raw=Json.Obj(raw),Lower=score.Lower,Count=score.N,Win=score.P,GainLower=Statistics.ComparativeGain(raw,baseline),Note=note};}
+  static Row Make(string name,string details,object raw,object baseline,string note){var score=Statistics.Calculate(raw);return new Row{Name=name,StarterName=details,Raw=Json.Obj(raw),Lower=score.Lower,Count=score.N,Win=score.P,GainLower=Statistics.AverageGain(raw,baseline),Note=note};}
   public static List<Group> Build(DataStore d,object raw){
    var hero=Json.Get(Json.Get(raw,"champion"),"stats");var choices=Choices(d,raw);var groups=new List<Group>();
    groups.Add(new Group{Path=Prefix+"plans",Title="核心出装",Rows=choices.Select((c,i)=>Make("★常规",PurchaseLine(d,c),c.Starter,hero,(c.IsFallback?"严格筛选无合格路线，改用有效路线与对应出门装中统计学胜率最高的参考方案；不代表相对英雄总体有正收益。\n":"")+"该序列结合核心路线、出门装与鞋子位置建议，没有真实的完整序列胜率。\n"+c.ShoeAdvice+"\n"+c.ShoeNote)).ToList()});
@@ -130,23 +130,23 @@ namespace ConfidenceDesktop {
      var special=specialRoutes.FirstOrDefault(s=>ReferenceEquals(s.Choice,c));
      string label=special!=null?SpecialRoutes.Label(d,special):"★常规";
      laterRows.AddRange(RecommendedLater(d,special==null?raw:special.ConditionalData,c,slot).Select(r=>new Row{
-      Name=label,StarterName=d.Lookup("items",Json.Get(r.Item,"id")),ShoeAdvice=r.Grade,Raw=Json.Obj(r.Item),Lower=r.Lower,GainLower=r.Gain,Count=r.EvidenceCount,
+      Name=label,StarterName=d.Lookup("items",Json.Get(r.Item,"id")),ShoeAdvice=r.Grade,Raw=Json.Obj(r.Item),Lower=r.Lower,GainLower=Statistics.AverageGain(r.Item,hero),Count=r.EvidenceCount,
       Note=(r.HasRouteEvidence?"按位置榜与本核心后续成装综合估计":"仅位置榜估计")+"（经验收缩）；评级为与第一名预计胜率差距 ≤1/2/3 个百分点的 S/A/B。第六件已排除第五件的最佳候选；已排除已有装备、鞋类冲突与合成奖励，不代表整套出装的联合胜率。"
      }));
     }
     foreach(var combo in comboPlans){
      var candidates=slot==5?combo.Fifth:combo.Sixth;
      laterRows.AddRange(candidates.Select(r=>new Row{
-      Name=combo.Label,StarterName=d.Lookup("items",Json.Get(r.Item,"id")),ShoeAdvice=r.Grade,Raw=Json.Obj(r.Item),Lower=r.Lower,GainLower=r.Gain,Count=r.EvidenceCount,
+      Name=combo.Label,StarterName=d.Lookup("items",Json.Get(r.Item,"id")),ShoeAdvice=r.Grade,Raw=Json.Obj(r.Item),Lower=r.Lower,GainLower=Statistics.AverageGain(r.Item,hero),Count=r.EvidenceCount,
       Note=combo.MainAugmentId==null?"按两个海克斯的数据综合评级，无组合预计胜率。":"按"+d.Lookup("augments",combo.MainAugmentId)+"的数据评级。"
      }));
     }
-    groups.Add(new Group{Path=Prefix+"later/"+slot,Title="第"+slot+"件",RateTitle="预计胜率",GainTitle="预计提升",Rows=laterRows});
+    groups.Add(new Group{Path=Prefix+"later/"+slot,Title="第"+slot+"件",RateTitle="预计胜率",GainTitle="统计学胜率提升",Rows=laterRows});
    }
    var augmentRows=Json.Arr(Json.Get(Json.Get(raw,"augments"),"all")).ToDictionary(r=>Json.Str(Json.Get(r,"id")));
    var labels=choices.Select(c=>"★常规")
-    .Concat(ShopBuilds.OrderPlans(specialRoutes,s=>augmentRows[s.AugmentId],s=>"augment-"+s.AugmentId).Select(s=>SpecialRoutes.Label(d,s)))
-    .Concat(ShopBuilds.OrderPlans(comboPlans,c=>c.Combination,c=>c.Shop.Key).Select(c=>c.Label))
+    .Concat(ShopBuilds.OrderPlans(specialRoutes,s=>augmentRows[s.AugmentId],s=>Statistics.ComparativeGain(augmentRows[s.AugmentId],Json.Get(Json.Get(raw,"champion"),"stats"))).Select(s=>SpecialRoutes.Label(d,s)))
+    .Concat(ShopBuilds.OrderPlans(comboPlans,c=>c.Combination,c=>Statistics.CombinationGain(c.Combination,raw)).Select(c=>c.Label))
     .Distinct().Select((name,index)=>new {name,index}).ToDictionary(p=>p.name,p=>p.index);
    // Reorder only the display rows after all recommendation calculations are complete.
    foreach(var group in groups)group.Rows=group.Rows.OrderBy(r=>labels.ContainsKey(r.Name)?labels[r.Name]:int.MaxValue).ToList();

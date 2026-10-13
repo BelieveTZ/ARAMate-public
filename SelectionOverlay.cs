@@ -99,7 +99,7 @@ namespace ConfidenceDesktop {
                 if(matches.Count==0&&text.Length>=2)matches=data.Resources["champions"].Where(p=>HeroNames(p).Any(name=>name.Length>=4&&name.StartsWith(text,StringComparison.Ordinal))).ToList();
                 if(matches.Count==0)matches=data.Resources["champions"].Where(p=>HeroNames(p).Any(name=>OneCharacterDifferent(text,name))).ToList();
                 if(matches.Count!=1)continue;var card=FromClient(data,int.Parse(matches[0].Key),scope,width,height);if(card==null)continue;
-                card.Compact=false;card.PortraitArc=false;card.PlainChoice=true;card.Card.Name=card.Card.Name.Split(new[]{'·'})[0].Trim();card.Context="";int w=line.Frame.IsEmpty?Math.Max(180,(int)(width*.14)):Math.Max(180,(int)(line.Frame.Width*.85));int y=line.Frame.IsEmpty?(int)(height*.72)+36:(int)line.Frame.Bottom+36;card.Bounds=new Rectangle((int)((line.Frame.IsEmpty?line.Bounds.Left+line.Bounds.Width/2:line.Frame.Left+line.Frame.Width/2f)-w/2),Math.Min(y,height-100),w,95);hits.Add(card);
+                card.Compact=false;card.PortraitArc=false;card.PlainChoice=true;card.Card.Name=ConfidenceDesktop.HeroNames.Name(card.Card.Name).Trim();card.Context="";int w=line.Frame.IsEmpty?Math.Max(180,(int)(width*.14)):Math.Max(180,(int)(line.Frame.Width*.85));int y=line.Frame.IsEmpty?(int)(height*.72)+36:(int)line.Frame.Bottom+36;card.Bounds=new Rectangle((int)((line.Frame.IsEmpty?line.Bounds.Left+line.Bounds.Width/2:line.Frame.Left+line.Frame.Width/2f)-w/2),Math.Min(y,height-100),w,95);hits.Add(card);
             }
             hits=hits.GroupBy(c=>c.Card.Id).Select(g=>g.First()).ToList();
             if(hits.Count>3)return empty;

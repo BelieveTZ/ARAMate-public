@@ -11,15 +11,16 @@ namespace ConfidenceDesktop {
   const string Prefix="aramate-shop-";
   const string LegacyPrefix="believetz-shop-";
   static IEnumerable<string> CandidateFiles(string directory){return Directory.GetFiles(directory,Prefix+"*.json").Concat(Directory.GetFiles(directory,LegacyPrefix+"*.json"));}
-  // true：较小的 sortrank 靠前；若游戏按较大的值靠前，只需改为 false。
+  // 文件名按补零名次升序排列，sortrank 同步保留。
   public const bool SortAscending=true;
   internal static int SortRank(int position){return SortAscending?position:-position;}
-  internal static IOrderedEnumerable<T> OrderPlans<T>(IEnumerable<T> plans,Func<T,object> row,Func<T,string> key){
-   return plans.OrderByDescending(p=>Statistics.Calculate(row(p)).Lower).ThenByDescending(p=>Json.Num(Json.Get(row(p),"sampleCount"))).ThenBy(key,StringComparer.Ordinal);
+  internal static IEnumerable<T> OrderPlans<T>(IEnumerable<T> plans,Func<T,object> row,Func<T,double> gain){
+   var scored=plans.Select(p=>new{Plan=p,Lower=Statistics.Calculate(row(p)).Lower,Gain=gain(p),Count=Json.Num(Json.Get(row(p),"sampleCount"))});
+   return Statistics.OrderDisplayed(scored,p=>p.Lower,p=>p.Gain,p=>p.Count).Select(p=>p.Plan);
   }
-  internal static void RankPlans(IEnumerable<ShopPlan> plans,Func<ShopPlan,object> row,int start){
+  internal static void RankPlans(IEnumerable<ShopPlan> plans,Func<ShopPlan,object> row,object heroRaw,int start){
    int index=0;
-   foreach(var plan in OrderPlans(plans,row,p=>p.Key))plan.Set["sortrank"]=SortRank(start+index++);
+   foreach(var plan in OrderPlans(plans,row,p=>p.Key.StartsWith("combo-",StringComparison.Ordinal)?Statistics.CombinationGain(row(p),heroRaw):Statistics.ComparativeGain(row(p),Json.Get(Json.Get(heroRaw,"champion"),"stats"))))plan.Set["sortrank"]=SortRank(start+index++);
   }
   public const string CombinationRole="海克斯组合";
   static IEnumerable<object> Ranked(object rows){return Json.Arr(rows).Where(r=>!double.IsNaN(Statistics.Calculate(r).Lower)).OrderByDescending(r=>Statistics.Calculate(r).Lower).ThenByDescending(r=>Json.Num(Json.Get(r,"sampleCount")));}
@@ -76,10 +77,13 @@ namespace ConfidenceDesktop {
     result.Add(new ShopPlan{Hero=hero,Key=key,Role="海克斯专用",Flow=name,Title=title,Gap=special.Improvement,Set=set});
    }
    var rows=Json.Arr(Json.Get(Json.Get(raw,"augments"),"all")).ToDictionary(r=>Json.Str(Json.Get(r,"id")));
-   RankPlans(result,p=>rows[p.Key.Substring(8)],100);
+   RankPlans(result,p=>rows[p.Key.Substring(8)],raw,100);
    return result;
   }
-  public static string FileName(ShopPlan p){return Prefix+p.Hero+"-"+(p.Role=="海克斯专用"?"1-":p.Role==CombinationRole?"2-":"0-")+p.Key+".json";}
+  public static string FileName(ShopPlan p){
+   double rank=Json.Num(Json.Get(p.Set,"sortrank"));if(double.IsNaN(rank)||rank<0||rank>=10000||rank!=Math.Floor(rank))throw new InvalidDataException("商店套装名次必须为 0–9999 的整数");
+   return Prefix+p.Hero+"-"+((int)rank).ToString("D4",System.Globalization.CultureInfo.InvariantCulture)+"-"+p.Key+".json";
+  }
   public static List<ShopPlan> Export(DataStore data,string scope,double gap,string directory){
    scope="high";if(gap<0||gap>.1||double.IsNaN(gap))throw new ArgumentException("流派差距阈值无效");Directory.CreateDirectory(directory);
    var plans=data.Heroes.Where(h=>h.Id>0).SelectMany(h=>Build(data,h.Id,scope,gap)).ToList();foreach(var plan in plans)File.WriteAllText(Path.Combine(directory,FileName(plan)),Json.Write(plan.Set),new UTF8Encoding(false));
@@ -106,7 +110,7 @@ namespace ConfidenceDesktop {
   }
   static bool IsOwned(string path){
    try{var old=Json.Read(path);int hero=(int)Json.Num(Json.Arr(Json.Get(old,"associatedChampions")).FirstOrDefault(),0);string stem=Path.GetFileNameWithoutExtension(path),prefix=stem.StartsWith(LegacyPrefix,StringComparison.Ordinal)?LegacyPrefix:Prefix,head=prefix+hero+"-";
-    if(hero<=0||!stem.StartsWith(head,StringComparison.Ordinal))return false;string key=stem.Substring(head.Length);if(key.StartsWith("0-",StringComparison.Ordinal)||key.StartsWith("1-",StringComparison.Ordinal)||key.StartsWith("2-",StringComparison.Ordinal))key=key.Substring(2);
+    if(hero<=0||!stem.StartsWith(head,StringComparison.Ordinal))return false;string key=stem.Substring(head.Length);var rank=System.Text.RegularExpressions.Regex.Match(key,@"^(?:[0-9]{4}|[012])-");if(rank.Success)key=key.Substring(rank.Length);
     return System.Text.RegularExpressions.Regex.IsMatch(key,"^[a-z0-9_-]+$")&&Json.Str(Json.Get(old,"uid"))==Uid(hero,key,prefix);
    }catch{return false;}
   }

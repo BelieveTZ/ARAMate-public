@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -14,7 +14,7 @@ namespace ConfidenceDesktop {
     }
     public static class GainBoardCache {
         // Increment whenever board thresholds, calculation or display ordering changes.
-        public const string CalculationVersion="1";
+        public const string CalculationVersion="2";
         public static string Key(string snapshot,string version=AppVersion.Number,string calculation=CalculationVersion){return snapshot+"|"+version+"|"+calculation;}
         public static string FilePath(string directory){return Path.Combine(directory,"cache","gain-board.json");}
         public static GainBoards LoadOrCompute(string directory,string key,Func<GainBoards> compute,string bundledFile=null){

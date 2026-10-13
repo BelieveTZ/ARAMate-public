@@ -67,6 +67,6 @@ namespace ConfidenceDesktop {
    int first=early[0].Item1,last=first;foreach(var x in near.Where(x=>x.Item1>first)){if(x.Item1!=last+1||x.Item1>3)break;last=x.Item1;}
    return name+"：建议第 "+first+(last>first?"～"+last:"")+" 件（槽位参考）";
   }
-  public static Group ToGroup(DataStore data,object raw){var choices=Build(data,raw);return new Group{Path=GroupPath,Title="出装路线与对应最佳出门装",Rows=choices.Select((c,i)=>new Row{Name=c.Name,StarterName=c.StarterName,ShoeAdvice=c.ShoeAdvice,Note=c.ShoeNote+"\n路线筛选：距最高统计学胜率不超过5个百分点且路线统计学胜率提升非负。后两列为路线＋出门装的联合样本，相对英雄总体。",Lower=c.Lower,GainLower=Statistics.ComparativeGain(c.Starter,Json.Get(Json.Get(raw,"champion"),"stats")),Count=c.Count,Win=Json.Num(Json.Get(c.Starter,"winRate")),Raw=Json.Obj(c.Starter),Rank=i+1}).ToList()};}
+  public static Group ToGroup(DataStore data,object raw){var choices=Build(data,raw);return new Group{Path=GroupPath,Title="出装路线与对应最佳出门装",Rows=choices.Select((c,i)=>new Row{Name=c.Name,StarterName=c.StarterName,ShoeAdvice=c.ShoeAdvice,Note=c.ShoeNote+"\n路线筛选：距最高统计学胜率不超过5个百分点且路线点估计收益非负。后两列为路线＋出门装的联合样本，显示提升相对英雄总体。",Lower=c.Lower,GainLower=Statistics.AverageGain(c.Starter,Json.Get(Json.Get(raw,"champion"),"stats")),Count=c.Count,Win=Json.Num(Json.Get(c.Starter,"winRate")),Raw=Json.Obj(c.Starter),Rank=i+1}).ToList()};}
  }
 }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
@@ -89,6 +89,42 @@ namespace ConfidenceDesktop {
             double upper=other==remaining?1:1-BetaQuantile(.025,remaining-other,other+1);
             return lower-upper;
         }
+        // Compare this row directly with the hero average, using published integer-win ranges.
+        public static double AverageGain(object option,object hero){
+            double n,a0,a1,N,t0,t1;
+            if(!WinRange(option,out n,out a0,out a1)||!WinRange(hero,out N,out t0,out t1))return double.NaN;
+            double lower=a0==0?0:BetaQuantile(.025,a0,n-a0+1);
+            double upper=t1==N?1:1-BetaQuantile(.025,N-t1,t1+1);
+            return lower-upper;
+        }
+        static long combinationGainFallbackCount;
+        public static long CombinationGainFallbackCount {get{return System.Threading.Interlocked.Read(ref combinationGainFallbackCount);}}
+        static object CountedRow(double n,double wins){return new Dictionary<string,object>{{"sampleCount",n},{"winCount",wins},{"winRate",wins/n}};}
+        static bool IntegerCounts(object row,out double n,out double wins){
+            n=Json.Num(Json.Get(row,"sampleCount"));wins=Math.Round(PointRate(row)*n,MidpointRounding.AwayFromZero);
+            return !double.IsNaN(wins)&&!double.IsInfinity(n)&&n>0&&n==Math.Floor(n)&&wins>=0&&wins<=n;
+        }
+        public static bool TryCombinationPopulation(object combination,object hero,object a,object b,out object selected,out object population,out double neither){
+            selected=population=null;neither=double.NaN;
+            double N,W,nA,wA,nB,wB,nAB,wAB;
+            if(!IntegerCounts(hero,out N,out W)||!IntegerCounts(a,out nA,out wA)||!IntegerCounts(b,out nB,out wB)||!IntegerCounts(combination,out nAB,out wAB))return false;
+            neither=N-nA-nB+nAB;double wins=W-wA-wB+wAB;
+            if(nAB>nA||nAB>nB||nA>N||nB>N||wAB>wA||wAB>wB||wA-wAB>nA-nAB||wB-wAB>nB-nAB||neither<0||wins<0||wins>neither)return false;
+            selected=CountedRow(nAB,wAB);population=CountedRow(nAB+neither,wAB+wins);return true;
+        }
+        // Compare the pair with games selecting neither augment, using exact integer wins.
+        public static double CombinationGain(object combination,object hero,object a,object b){
+            object selected,population;double neither;
+            if(TryCombinationPopulation(combination,hero,a,b,out selected,out population,out neither))return ComparativeGain(selected,population);
+            System.Threading.Interlocked.Increment(ref combinationGainFallbackCount);return ComparativeGain(combination,hero);
+        }
+        public static double CombinationGain(object combination,object heroRaw){
+            var ids=Json.Arr(Json.Get(combination,"augmentIds")).Select(Json.Str).ToArray();
+            var singles=Json.Arr(Json.Get(Json.Get(heroRaw,"augments"),"all"));
+            return CombinationGain(combination,Json.Get(Json.Get(heroRaw,"champion"),"stats"),
+                ids.Length==2?singles.FirstOrDefault(r=>Json.Str(Json.Get(r,"id")??Json.Get(r,"augmentId"))==ids[0]):null,
+                ids.Length==2?singles.FirstOrDefault(r=>Json.Str(Json.Get(r,"id")??Json.Get(r,"augmentId"))==ids[1]):null);
+        }
         static bool WinRange(object row,out double n,out double low,out double high){
             n=Json.Num(Json.Get(row,"sampleCount"));low=high=double.NaN;
             double p=Json.Num(Json.Get(row,"winRate")),wins=Json.Num(Json.Get(row,"winCount")??Json.Get(row,"wins"));
@@ -140,6 +176,10 @@ namespace ConfidenceDesktop {
                 if(cdf<probability)lo=mid;else hi=mid;
             }
             lock(quantileLock){if(quantileCache.Count>=QuantileCacheCapacity)quantileCache.Clear();quantileCache[key]=lo;}return lo;
+        }
+        public static IOrderedEnumerable<T> OrderDisplayed<T>(IEnumerable<T> rows,Func<T,double> lower,Func<T,double> gain,Func<T,double> count){
+            return rows.OrderByDescending(r=>double.IsNaN(lower(r))?double.NegativeInfinity:double.Parse((lower(r)*100).ToString("F1",CultureInfo.CurrentCulture),CultureInfo.CurrentCulture))
+                .ThenByDescending(r=>double.IsNaN(gain(r))?double.NegativeInfinity:gain(r)).ThenByDescending(r=>double.IsNaN(lower(r))?double.NegativeInfinity:lower(r)).ThenByDescending(count);
         }
         public static string GainText(double value){if(double.IsNaN(value))return "";double points=Math.Round(value*100,1,MidpointRounding.AwayFromZero);return (points>0?"+":"")+points.ToString("F1",CultureInfo.InvariantCulture)+"%";}
         public static string Pct(double value) { return double.IsNaN(value)?"—":(value*100).ToString("F1",CultureInfo.InvariantCulture)+"%"; }
@@ -373,16 +413,22 @@ namespace ConfidenceDesktop {
                     else row.Note+="；总榜缺失或口径不一致，未提供排名";
                     baseline.Title="英雄在完整总榜中的排名"+(board==null?"":" / "+board.Rows.Count+" 位英雄");
                     ApplyOptionStatistics(groups.Where(g=>g!=baseline),row);
+                    var singles=groups.FirstOrDefault(g=>g.Path=="champions/augments/all");
+                    foreach(var group in groups.Where(g=>g.Path=="champions/augmentCombinations"||g.Path.StartsWith("champions/augmentCombinations/",StringComparison.Ordinal)))foreach(var option in group.Rows){
+                        var ids=Json.Arr(Json.Get(option.Raw,"augmentIds")).Select(Json.Str).ToArray();if(ids.Length!=2)continue;
+                        option.GainLower=Statistics.CombinationGain(option.Raw,row.Raw,
+                            singles==null?null:singles.Rows.Where(r=>Json.Str(Json.Get(r.Raw,"id")??Json.Get(r.Raw,"augmentId"))==ids[0]).Select(r=>r.Raw).FirstOrDefault(),
+                            singles==null?null:singles.Rows.Where(r=>Json.Str(Json.Get(r.Raw,"id")??Json.Get(r.Raw,"augmentId"))==ids[1]).Select(r=>r.Raw).FirstOrDefault());
+                    }
                 }
         }
         static void ApplyOptionStatistics(IEnumerable<Group> groups,Row baseline){
             if(baseline==null)return;
-            foreach(var group in groups){bool subset=Statistics.SummonerSubset(group,baseline);foreach(var option in group.Rows){option.GainLower=Statistics.ComparativeGain(option.Raw,baseline.Raw);option.GainUsesSubset=subset;}}
+            foreach(var group in groups){bool augment=group.Path=="champions/augments/all"||group.Path.StartsWith("champions/augments/stages/",StringComparison.Ordinal);foreach(var option in group.Rows){option.GainLower=augment?Statistics.ComparativeGain(option.Raw,baseline.Raw):Statistics.AverageGain(option.Raw,baseline.Raw);option.GainUsesSubset=false;}}
         }
         public static void SortDisplayedRates(Group group){
             if(group.Path.StartsWith(EquipmentRecommendations.Prefix+"later/")||group.Path=="champions/champion/stats"||!group.Rows.Any(r=>r.Rank>0))return;
-            group.Rows=group.Rows.OrderByDescending(r=>double.IsNaN(r.Lower)?double.NegativeInfinity:double.Parse((r.Lower*100).ToString("F1",System.Globalization.CultureInfo.InvariantCulture),System.Globalization.CultureInfo.InvariantCulture))
-                .ThenByDescending(r=>double.IsNaN(r.GainLower)?double.NegativeInfinity:r.GainLower).ThenByDescending(r=>double.IsNaN(r.Lower)?double.NegativeInfinity:r.Lower).ThenByDescending(r=>r.Count).ToList();
+            group.Rows=Statistics.OrderDisplayed(group.Rows,r=>r.Lower,r=>r.GainLower,r=>r.Count).ToList();
             for(int i=0;i<group.Rows.Count;i++)group.Rows[i].Rank=double.IsNaN(group.Rows[i].Lower)?0:i+1;
         }
         public static void FillAugmentStages(List<Group> groups){var overall=groups.FirstOrDefault(g=>g.Path=="champions/augments/all");if(overall==null)return;for(int stage=1;stage<=4;stage++){string path="champions/augments/stages/"+stage;var group=groups.FirstOrDefault(g=>g.Path==path);if(group==null){group=new Group{Path=path,Title=new[]{"总体","一选","二选","三选","四选"}[stage],Rows=new List<Row>()};groups.Add(group);}foreach(var row in overall.Rows.Where(r=>!double.IsNaN(r.Lower)&&r.Count>0)){string id=Json.Str(Json.Get(row.Raw,"id"));if(id.Length==0)continue;var existing=group.Rows.FirstOrDefault(r=>Json.Str(Json.Get(r.Raw,"id"))==id);if(existing!=null&&!double.IsNaN(existing.Lower)&&existing.Count>0)continue;group.Rows.RemoveAll(r=>Json.Str(Json.Get(r.Raw,"id"))==id);var available=Json.Arr(Json.Get(row.Raw,"availableStages")).Select(v=>(int)Json.Num(v)).Where(v=>v>=1&&v<=4).ToArray();if(available.Length>0&&!available.Contains(stage))continue;group.Rows.Add(row.OverallCopy());}group.Rows=group.Rows.OrderByDescending(r=>double.IsNaN(r.Lower)?-1:r.Lower).ThenByDescending(r=>r.Count).ToList();for(int i=0;i<group.Rows.Count;i++)group.Rows[i].Rank=double.IsNaN(group.Rows[i].Lower)?0:i+1;}}
