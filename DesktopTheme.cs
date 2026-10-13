@@ -1,0 +1,26 @@
+﻿using System;using System.Drawing;using System.Drawing.Drawing2D;using System.Windows.Forms;
+namespace ConfidenceDesktop {
+ public static class DesktopTheme {
+  public static readonly Color Canvas=Color.FromArgb(10,23,32),Surface=Color.FromArgb(16,35,46),Raised=Color.FromArgb(19,42,54),Line=Color.FromArgb(41,65,78),Text=Color.FromArgb(231,237,245),Muted=Color.FromArgb(148,165,185),Accent=Color.FromArgb(217,187,115),Selected=Color.FromArgb(40,51,50);
+  public static readonly Font Body=new Font("Microsoft YaHei UI",10),Strong=new Font("Microsoft YaHei UI",10,FontStyle.Bold),Title=new Font("Microsoft YaHei UI",13,FontStyle.Bold),Small=new Font("Microsoft YaHei UI",9);
+  public static GraphicsPath Rounded(Rectangle bounds,int radius){var p=new GraphicsPath();int d=Math.Min(radius*2,Math.Min(bounds.Width,bounds.Height));if(d<2){p.AddRectangle(bounds);return p;}p.AddArc(bounds.Left,bounds.Top,d,d,180,90);p.AddArc(bounds.Right-d,bounds.Top,d,d,270,90);p.AddArc(bounds.Right-d,bounds.Bottom-d,d,d,0,90);p.AddArc(bounds.Left,bounds.Bottom-d,d,d,90,90);p.CloseFigure();return p;}
+  public static void Box(Graphics g,Rectangle bounds,Color fill,Color border,int radius=8){g.SmoothingMode=SmoothingMode.AntiAlias;using(var p=Rounded(bounds,radius)){using(var b=new SolidBrush(fill))g.FillPath(b,p);using(var pen=new Pen(border))g.DrawPath(pen,p);}}
+ }
+ public class ModernButton:Button {
+  bool hovered,pressed;
+  public ModernButton(){SetStyle(ControlStyles.UserPaint|ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer,true);FlatStyle=FlatStyle.Flat;FlatAppearance.BorderSize=0;Cursor=Cursors.Hand;Font=DesktopTheme.Body;}
+  protected override void OnMouseEnter(EventArgs e){hovered=true;Invalidate();base.OnMouseEnter(e);}protected override void OnMouseLeave(EventArgs e){hovered=false;pressed=false;Invalidate();base.OnMouseLeave(e);}protected override void OnMouseDown(MouseEventArgs e){pressed=true;Invalidate();base.OnMouseDown(e);}protected override void OnMouseUp(MouseEventArgs e){pressed=false;Invalidate();base.OnMouseUp(e);}protected override void OnGotFocus(EventArgs e){Invalidate();base.OnGotFocus(e);}protected override void OnLostFocus(EventArgs e){Invalidate();base.OnLostFocus(e);}
+  protected override void OnPaint(PaintEventArgs e){e.Graphics.Clear(Parent==null?DesktopTheme.Canvas:Parent.BackColor);var fill=pressed?DesktopTheme.Selected:hovered?DesktopTheme.Raised:BackColor;var bounds=new Rectangle(1,2,Math.Max(1,Width-3),Math.Max(1,Height-5));DesktopTheme.Box(e.Graphics,bounds,fill,Focused?DesktopTheme.Accent:FlatAppearance.BorderSize>0?DesktopTheme.Line:fill);TextRenderer.DrawText(e.Graphics,Text,Font,bounds,Enabled?ForeColor:DesktopTheme.Muted,TextFormatFlags.HorizontalCenter|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);}
+ }
+ public class ModernComboBox:ComboBox {
+  public ModernComboBox(){SetStyle(ControlStyles.UserPaint|ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer,true);FlatStyle=FlatStyle.Flat;DrawMode=DrawMode.OwnerDrawFixed;ItemHeight=24;}
+  protected override void OnPaint(PaintEventArgs e){e.Graphics.Clear(Parent==null?DesktopTheme.Canvas:Parent.BackColor);var r=new Rectangle(0,0,Width-1,Height-1);DesktopTheme.Box(e.Graphics,r,DesktopTheme.Surface,DesktopTheme.Line,6);TextRenderer.DrawText(e.Graphics,Text,Font,new Rectangle(10,0,Math.Max(1,Width-34),Height),Enabled?DesktopTheme.Text:DesktopTheme.Muted,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);using(var p=new Pen(DesktopTheme.Muted,1.5f))e.Graphics.DrawLines(p,new[]{new Point(Width-20,Height/2-2),new Point(Width-15,Height/2+3),new Point(Width-10,Height/2-2)});}
+  protected override void OnSelectedIndexChanged(EventArgs e){Invalidate();base.OnSelectedIndexChanged(e);}protected override void OnGotFocus(EventArgs e){Invalidate();base.OnGotFocus(e);}protected override void OnLostFocus(EventArgs e){Invalidate();base.OnLostFocus(e);}
+ }
+ public class InputSurface:Panel {
+  readonly TextBox input;
+  public InputSurface(TextBox box){input=box;SetStyle(ControlStyles.UserPaint|ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer,true);Size=new Size(box.Width,34);Margin=box.Margin;box.BorderStyle=BorderStyle.None;box.BackColor=DesktopTheme.Surface;box.ForeColor=DesktopTheme.Text;box.Location=new Point(10,7);box.Width=Width-20;box.Anchor=AnchorStyles.Left|AnchorStyles.Right|AnchorStyles.Top;Controls.Add(box);box.GotFocus+=(s,e)=>Invalidate();box.LostFocus+=(s,e)=>Invalidate();Click+=(s,e)=>box.Focus();}
+  protected override void OnPaint(PaintEventArgs e){e.Graphics.Clear(Parent==null?DesktopTheme.Canvas:Parent.BackColor);DesktopTheme.Box(e.Graphics,new Rectangle(0,0,Width-1,Height-1),DesktopTheme.Surface,DesktopTheme.Line,6);}
+ }
+}
+

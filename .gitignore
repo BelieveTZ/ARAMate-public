@@ -1,0 +1,8 @@
+*.exe
+!installer/MicrosoftEdgeWebview2Setup.exe
+!installer/payload/设置游戏目录.exe
+*.pdb
+obj/
+bin/
+public/
+网站数据/
