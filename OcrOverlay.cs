@@ -329,16 +329,34 @@ namespace ConfidenceDesktop {
     public class BadgeWindow:Form {
         public CardResult Result;
         // Defer topmost positioning to Present, which uses SWP_NOACTIVATE.
-        public BadgeWindow(){StartPosition=FormStartPosition.Manual;FormBorderStyle=FormBorderStyle.None;ShowInTaskbar=false;DoubleBuffered=true;BackColor=BadgePaint.TransparentColor;TransparencyKey=BadgePaint.TransparentColor;Opacity=1;}
+        readonly bool pixelAlpha;
+        public BadgeWindow():this(false){}
+        public BadgeWindow(bool usePixelAlpha){pixelAlpha=usePixelAlpha;StartPosition=FormStartPosition.Manual;FormBorderStyle=FormBorderStyle.None;ShowInTaskbar=false;DoubleBuffered=!pixelAlpha;BackColor=BadgePaint.TransparentColor;if(!pixelAlpha)TransparencyKey=BadgePaint.TransparentColor;Opacity=1;}
         protected override bool ShowWithoutActivation {get{return true;}}
         protected override CreateParams CreateParams {get{var p=base.CreateParams;p.ExStyle|=0x08000000|0x00000020|0x00080000|0x00000080;return p;}}
         protected override void WndProc(ref Message message){if(message.Msg==0x84){message.Result=new IntPtr(-1);return;}base.WndProc(ref message);}
-        protected override void OnPaint(PaintEventArgs e){if(Result!=null)BadgePaint.Draw(e.Graphics,ClientRectangle,Result);}
+        protected override void OnPaint(PaintEventArgs e){if(!pixelAlpha&&Result!=null)BadgePaint.Draw(e.Graphics,ClientRectangle,Result);}
         public void PresentClipped(CardResult result,Point origin,Rectangle work){var bounds=result.Bounds;bounds.Offset(origin);var visible=Rectangle.Intersect(bounds,work);if(visible.Width<=0||visible.Height<=0){Hide();return;}visible.Offset(-bounds.X,-bounds.Y);var old=Region;Region=new Region(visible);if(old!=null)old.Dispose();Present(result,origin);}
         public static bool SameCombinations(CardResult first,CardResult second){return first.Combinations.SequenceEqual(second.Combinations)&&first.CombinationTexts.SequenceEqual(second.CombinationTexts);}
-        public void Present(CardResult result,Point origin){var old=Result;var r=result.Bounds;var bounds=new Rectangle(origin.X+r.X,origin.Y+r.Y,r.Width,r.Height);bool same=old!=null&&old.Card!=null&&result.Card!=null&&old.Card.Id==result.Card.Id&&old.Card.Name==result.Card.Name&&ReferenceEquals(old.Row,result.Row)&&old.Context==result.Context&&old.SampleNote==result.SampleNote&&old.HiddenCombinations==result.HiddenCombinations&&old.CombinationText==result.CombinationText&&ReferenceEquals(old.Combination,result.Combination)&&SameCombinations(old,result);bool moved=Bounds!=bounds;bool shown=Visible;Result=result;if(result.PortraitArc){using(var path=BadgePaint.ArcPath(result,new Rectangle(0,0,r.Width,r.Height))){var oldRegion=Region;Region=new Region(path);if(oldRegion!=null)oldRegion.Dispose();}}else if(old!=null&&old.PortraitArc){var oldRegion=Region;Region=null;if(oldRegion!=null)oldRegion.Dispose();}if(moved)Bounds=bounds;if(!shown)Show();if(moved||!shown)NativeOverlay.SetWindowPos(Handle,new IntPtr(-1),bounds.X,bounds.Y,bounds.Width,bounds.Height,0x0010|0x0040);if(!same||!shown||moved||result.BenchSlot)Invalidate();}
+        public void Present(CardResult result,Point origin){var old=Result;var r=result.Bounds;var bounds=new Rectangle(origin.X+r.X,origin.Y+r.Y,r.Width,r.Height);bool same=old!=null&&old.Card!=null&&result.Card!=null&&old.Card.Id==result.Card.Id&&old.Card.Name==result.Card.Name&&ReferenceEquals(old.Row,result.Row)&&old.Context==result.Context&&old.SampleNote==result.SampleNote&&old.HiddenCombinations==result.HiddenCombinations&&old.CombinationText==result.CombinationText&&ReferenceEquals(old.Combination,result.Combination)&&SameCombinations(old,result);bool moved=Bounds!=bounds;bool shown=Visible;Result=result;if(result.PortraitArc){using(var path=BadgePaint.TextArcPath(result,new Rectangle(0,0,r.Width,r.Height))){var oldRegion=Region;Region=new Region(path);if(oldRegion!=null)oldRegion.Dispose();}}else if(old!=null&&old.PortraitArc){var oldRegion=Region;Region=null;if(oldRegion!=null)oldRegion.Dispose();}if(moved)Bounds=bounds;if(!shown)Show();if(moved||!shown)NativeOverlay.SetWindowPos(Handle,new IntPtr(-1),bounds.X,bounds.Y,bounds.Width,bounds.Height,0x0010|0x0040);if(!same||!shown||moved||result.BenchSlot){if(pixelAlpha)using(var bitmap=new Bitmap(bounds.Width,bounds.Height,System.Drawing.Imaging.PixelFormat.Format32bppPArgb)){using(var graphics=Graphics.FromImage(bitmap)){graphics.Clear(Color.Transparent);BadgePaint.Draw(graphics,new Rectangle(Point.Empty,bitmap.Size),result);}NativeOverlay.PresentAlpha(Handle,bitmap,bounds.Location);}else Invalidate();}}
     }
     public static class NativeOverlay {
+        [StructLayout(LayoutKind.Sequential,Pack=1)]struct AlphaBlend{public byte Operation,Flags,Opacity,Format;}
+        [DllImport("user32.dll",SetLastError=true)]static extern bool UpdateLayeredWindow(IntPtr window,IntPtr destination,ref Point position,ref Size size,IntPtr source,ref Point sourcePosition,int key,ref AlphaBlend blend,int flags);
+        [DllImport("user32.dll")]static extern IntPtr GetDC(IntPtr window);
+        [DllImport("user32.dll")]static extern int ReleaseDC(IntPtr window,IntPtr dc);
+        [DllImport("gdi32.dll")]static extern IntPtr CreateCompatibleDC(IntPtr dc);
+        [DllImport("gdi32.dll")]static extern bool DeleteDC(IntPtr dc);
+        [DllImport("gdi32.dll")]static extern IntPtr SelectObject(IntPtr dc,IntPtr item);
+        [DllImport("gdi32.dll")]static extern bool DeleteObject(IntPtr item);
+        public static void PresentAlpha(IntPtr window,Bitmap bitmap,Point position){
+            IntPtr screen=GetDC(IntPtr.Zero),memory=IntPtr.Zero,image=IntPtr.Zero,previous=IntPtr.Zero;
+            try{
+                memory=CreateCompatibleDC(screen);image=bitmap.GetHbitmap(Color.FromArgb(0));previous=SelectObject(memory,image);
+                var size=bitmap.Size;var source=new Point();var blend=new AlphaBlend{Opacity=255,Format=1};
+                if(!UpdateLayeredWindow(window,screen,ref position,ref size,memory,ref source,0,ref blend,2))throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+            }finally{if(previous!=IntPtr.Zero)SelectObject(memory,previous);if(image!=IntPtr.Zero)DeleteObject(image);if(memory!=IntPtr.Zero)DeleteDC(memory);if(screen!=IntPtr.Zero)ReleaseDC(IntPtr.Zero,screen);}
+        }
         public delegate void LocationEvent(IntPtr hook,uint evt,IntPtr window,int obj,int child,uint thread,uint time);
         [DllImport("user32.dll")]public static extern IntPtr SetWinEventHook(uint first,uint last,IntPtr module,LocationEvent callback,uint process,uint thread,uint flags);
         [DllImport("user32.dll")]public static extern bool UnhookWinEvent(IntPtr hook);

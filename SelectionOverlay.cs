@@ -14,37 +14,23 @@ namespace ConfidenceDesktop {
         public float FontSize;
     }
     public static class BenchBadgeLayout {
-        public static int Width(int clientWidth,int slot,float dpiScale){
-            slot=Math.Max(0,Math.Min(9,slot));
-            double distance=double.MaxValue;
-            if(slot>0)distance=Math.Min(distance,SelectionMatcher.BenchCenters[slot]-SelectionMatcher.BenchCenters[slot-1]);
-            if(slot<9)distance=Math.Min(distance,SelectionMatcher.BenchCenters[slot+1]-SelectionMatcher.BenchCenters[slot]);
-            return Math.Max(1,(int)Math.Floor(clientWidth*distance)-(int)Math.Ceiling(3*dpiScale));
-        }
-        public static float FontLimit(int clientHeight){return Math.Max(12,18*clientHeight/900f);}
-        // All inputs and results use physical screen pixels. A single overflowing badge returns the whole row inside.
+        public static int Width(int clientWidth,int slot,float dpiScale){return Math.Max(1,(int)Math.Round(clientWidth*SelectionMatcher.BenchWidths[Math.Max(0,Math.Min(9,slot))])-2);}
+        public static float FontLimit(int clientHeight){return Math.Max(9,10*clientHeight/720f);}
+        // Bench badges stay inside the portrait, regardless of desktop position or DPI.
         public static BenchBadgePlacement[] Calculate(Rectangle client,Rectangle work,int[] slots,float[] fonts,float dpiScale,int bottom,int slotHeight){
-            var results=new BenchBadgePlacement[slots.Length];bool outside=true;
-            for(int i=0;i<slots.Length;i++){
-                int width=Width(client.Width,slots[i],dpiScale);
-                float size=Math.Max(12,Math.Min(FontLimit(client.Height),fonts[i]));
-                int height=2*(int)Math.Ceiling(size*1.4f)+4;
-                var bounds=new Rectangle(client.X+(int)Math.Round(client.Width*SelectionMatcher.BenchCenters[slots[i]]-width/2.0),client.Top-(int)Math.Ceiling(2*dpiScale)-height,width,height);
-                if(bounds.Top<work.Top)outside=false;
-                results[i]=new BenchBadgePlacement{Bounds=bounds,Outside=true,FontSize=size};
-            }
-            if(!outside)for(int i=0;i<results.Length;i++){
-                var bounds=SelectionMatcher.AlignedBenchBadgeBounds(client.Width,client.Height,slots[i],bottom,slotHeight);bounds.Offset(client.Location);
-                results[i].Bounds=bounds;results[i].Outside=false;results[i].FontSize=0;
-            }
-            return results;
+            return slots.Select(slot=>{var bounds=SelectionMatcher.AlignedBenchBadgeBounds(client.Width,client.Height,slot,bottom,slotHeight);bounds.Offset(client.Location);return new BenchBadgePlacement{Bounds=bounds,Outside=false,FontSize=0};}).ToArray();
         }
     }
+
     public static class SelectionMatcher {
-        // The avatar frames begin at y=15 in the 720px reference client; use the strip above them.
+        // Leave the one-pixel frame uncovered so pixel detection can still read its bottom edge.
         public static Rectangle BenchBadgeBounds(double slotX,int slotWidth,double stride,int slotBottom,int slotHeight){
-            int width=Math.Max(1,(int)Math.Floor(stride)-3),height=Math.Max(1,slotBottom-slotHeight);
-            return new Rectangle((int)Math.Round(slotX+slotWidth/2.0-width/2.0),0,width,height);
+            int width=Math.Max(1,slotWidth-2),height=Math.Min(Math.Max(1,slotHeight-2),Math.Max(13,(int)Math.Ceiling(slotHeight*15.0/49)));
+            return new Rectangle((int)Math.Round(slotX)+1,slotBottom-1-height,width,height);
+        }
+        public static Rectangle BenchAvatarBounds(int width,int height,int slot,int bottom,int slotHeight){
+            slot=Math.Max(0,Math.Min(9,slot));int frameWidth=(int)Math.Round(width*BenchWidths[slot]);
+            return new Rectangle((int)Math.Round(width*BenchCenters[slot]-frameWidth/2.0)+1,bottom-slotHeight+1,frameWidth-2,slotHeight-2);
         }
         // Measured frame centers and widths in the 1280x720 client; each slot is independent.
         public static readonly double[] BenchCenters={0.294928093774,0.340179357394,0.386348611419,0.431816257366,0.477959480932,0.523855696378,0.569291528698,0.615234375000,0.661442201327,0.706629354602};
@@ -52,7 +38,7 @@ namespace ConfidenceDesktop {
         public static Rectangle AlignedBenchBadgeBounds(int width,int height,int slot,int bottom,int slotHeight){
             slot=Math.Max(0,Math.Min(9,slot));double center=width*BenchCenters[slot];int slotWidth=(int)Math.Round(width*BenchWidths[slot]);
             var bounds=BenchBadgeBounds(center-slotWidth/2.0,slotWidth,width*58.6/1280,bottom,slotHeight);
-            bounds.X=(int)Math.Round(center-bounds.Width/2.0);return bounds;
+            return bounds;
         }
         public static Rectangle FixedBenchBadgeBounds(int width,int height,int slot){return AlignedBenchBadgeBounds(width,height,slot,(int)Math.Round(height*64.0/720),(int)Math.Round(height*49.0/720));}
         public static Rectangle KeepBench(Rectangle previous,double previousStride,Rectangle found,double foundStride,bool reset,out double stride){
@@ -69,7 +55,7 @@ namespace ConfidenceDesktop {
             return card;
         }
         public static List<CardResult> FromSession(DataStore data,ClientStatus state,string scope,int width,int height){
-            var results=new List<CardResult>();
+            var results=new List<CardResult>();var benchBoard=data.Groups(0,scope).FirstOrDefault(g=>g.Path=="champions/rows");if(benchBoard!=null)BadgePaint.ConfigureBenchMetrics(benchBoard.Rows);
             if(state.Team.Length>0){for(int i=0;i<Math.Min(5,state.Team.Length);i++){var teammate=FromClient(data,state.Team[i],scope,width,height);if(teammate==null)continue;float radius=height*29f/720;float cx=width*.067f,cy=height*(.407f+(i-(Math.Min(5,state.Team.Length)-1)/2f)*80f/720);AlignPortrait(teammate,new RectangleF(cx-radius,cy-radius,radius*2,radius*2),width,height);results.Add(teammate);}}else{var selected=FromClient(data,state.Champion,scope,width,height);if(selected!=null)results.Add(selected);}
             for(int i=0;i<Math.Min(10,state.Bench.Length);i++){
                 var card=FromClient(data,state.Bench[i],scope,width,height);if(card==null)continue;
@@ -165,13 +151,20 @@ namespace ConfidenceDesktop {
             if(card==null||circle.IsEmpty)return;
             float cy=circle.Top+circle.Height/2,step=clientHeight*80f/720;
             int top=(int)Math.Round(cy-step/2),bottom=(int)Math.Round(cy+step/2);
-            card.ArcCenterX=(float)(clientWidth*0.501118742667);card.ArcCenterY=(float)(clientHeight*0.416201229141);
-            card.ArcRadius=(float)(clientHeight*0.447684152040+clientHeight*2.0/720);card.ArcDepth=clientHeight*58f/720;
+            card.ArcCenterX=(float)(clientWidth*0.498127627098191);card.ArcCenterY=(float)(clientHeight*0.416108654643941);
+            card.ArcRadius=(float)(clientHeight*0.443888775207369+clientHeight*2.0/720);card.ArcDepth=clientHeight*58f/720;
             double near=Math.Max(top,Math.Min(bottom,card.ArcCenterY)),far=Math.Abs(top-card.ArcCenterY)>Math.Abs(bottom-card.ArcCenterY)?top:bottom;
-            int left=(int)Math.Floor(ArcLeft(card,near,true)),right=(int)Math.Ceiling(ArcLeft(card,far,false));
+            int left=(int)Math.Floor(ArcLeft(card,near,true)-BadgePaint.TeamTextShift(card)),right=(int)Math.Ceiling(ArcLeft(card,far,false));
             card.Bounds=new Rectangle(left,top,right-left,bottom-top);
 
         }
+        public static double PosterEdgeX(CardResult card,double y){
+            // Skin/background boundary measured independently from the gold decoration.
+            double width=card.ArcCenterX/0.498127627098191,height=card.ArcDepth*720/58;
+            double cx=width*0.4939348006930161,cy=height*0.41633005293262404,radius=height*0.45274444678396664;
+            return cx-Math.Sqrt(Math.Max(0,radius*radius-(y-cy)*(y-cy)));
+        }
+        public static double GoldArcX(CardResult card,double y){double radius=card.ArcRadius-card.ArcDepth*2/58;return card.ArcCenterX-Math.Sqrt(Math.Max(0,radius*radius-(y-card.ArcCenterY)*(y-card.ArcCenterY)));}
         public static double ArcLeft(CardResult card,double y,bool outer){double r=card.ArcRadius;return card.ArcCenterX-Math.Sqrt(Math.Max(0,r*r-(y-card.ArcCenterY)*(y-card.ArcCenterY)))-(outer?card.ArcDepth:0);}
         public static bool KeepChoices(bool sameScene,int newCount,bool header,TimeSpan age){return sameScene&&newCount<2&&age<TimeSpan.FromSeconds(header?3:1.5);}
         public static List<Row> ReasonableSkillOrders(IEnumerable<Row> source){
@@ -222,26 +215,17 @@ namespace ConfidenceDesktop {
         Func<CaptureTarget> positionTarget=()=>{Rectangle area;IntPtr handle;return NativeOverlay.ForegroundClient(out area,out handle)?new CaptureTarget{Bounds=area,Handle=handle}:null;};
         NativeOverlay.LocationEvent locationCallback;IntPtr locationHook;bool moving;
         IntPtr presentedHandle;Size presentedSize;Point presentedOrigin;List<CardResult> presentedItems;bool presentedSpells;
-        float benchDpi;Size benchFontSize;List<CardResult> benchFontItems;float[] benchFonts;
         Rectangle benchSlot;double benchStride;Size benchSize;RectangleF portraitCircle;string choiceScope;
         string key,spellKey;CardResult spellResult;List<CardResult> results,choices=new List<CardResult>();
         bool disposed,busy;LocalOcr ocr;DateTime nextScan=DateTime.MinValue,choiceTime=DateTime.MinValue;Rectangle choiceArea;IntPtr choiceHandle;
-        public SelectionOverlayController(Func<DataStore> data,Func<string> sample,Func<ClientStatus> state,Func<bool> active,Action<string> message){store=data;scope=sample;client=state;enabled=active;status=message;for(int i=0;i<15;i++)badges.Add(new BadgeWindow());timer.Interval=250;timer.Tick+=async(s,e)=>await Tick();timer.Start();positionTimer.Interval=16;positionTimer.Tick+=(s,e)=>FollowPosition();positionTimer.Start();locationCallback=(hook,evt,window,obj,child,thread,time)=>{if(!disposed&&window==presentedHandle&&obj==0&&child==0)FollowPosition();};locationHook=NativeOverlay.SetWinEventHook(0x800B,0x800B,IntPtr.Zero,locationCallback,0,0,2);}
+        public SelectionOverlayController(Func<DataStore> data,Func<string> sample,Func<ClientStatus> state,Func<bool> active,Action<string> message){store=data;scope=sample;client=state;enabled=active;status=message;for(int i=0;i<15;i++)badges.Add(new BadgeWindow(true));timer.Interval=250;timer.Tick+=async(s,e)=>await Tick();timer.Start();positionTimer.Interval=16;positionTimer.Tick+=(s,e)=>FollowPosition();positionTimer.Start();locationCallback=(hook,evt,window,obj,child,thread,time)=>{if(!disposed&&window==presentedHandle&&obj==0&&child==0)FollowPosition();};locationHook=NativeOverlay.SetWinEventHook(0x800B,0x800B,IntPtr.Zero,locationCallback,0,0,2);}
         void UpdateBench(Rectangle found,double stride,Size size){if(benchSize!=size)key=null;benchSlot=SelectionMatcher.KeepBench(benchSlot,benchStride,found,stride,benchSize!=size,out benchStride);benchSize=size;}
         void ResetBench(){benchSlot=SelectionMatcher.KeepBench(benchSlot,benchStride,Rectangle.Empty,0,true,out benchStride);benchSize=Size.Empty;key=null;}
         bool LayoutBench(IntPtr handle,Rectangle area,List<CardResult> items){
             var cards=items.Where(c=>c.BenchSlot).ToArray();if(cards.Length==0)return false;
-            float dpi=NativeOverlay.WindowDpiScale(handle);
-            if(benchFontItems!=items||benchFontSize!=area.Size||benchDpi!=dpi){
-                benchFonts=new float[cards.Length];
-                using(var bitmap=new Bitmap(1,1))using(var g=Graphics.FromImage(bitmap))for(int i=0;i<cards.Length;i++){
-                    var card=cards[i];benchFonts[i]=BadgePaint.BenchOutsideFontSize(g,BenchBadgeLayout.Width(area.Width,card.BenchIndex,dpi),BenchBadgeLayout.FontLimit(area.Height),card.Row==null?"暂无":"#"+card.Row.Rank,card.Row==null?"数据":Statistics.Pct(card.Row.Lower));
-                }
-                benchFontItems=items;benchFontSize=area.Size;benchDpi=dpi;
-            }
             int bottom=benchSlot.IsEmpty?(int)Math.Round(area.Height*64.0/720):benchSlot.Bottom;
             int height=benchSlot.IsEmpty?(int)Math.Round(area.Height*49.0/720):benchSlot.Height;
-            var placements=BenchBadgeLayout.Calculate(area,Screen.FromHandle(handle).WorkingArea,cards.Select(c=>c.BenchIndex).ToArray(),benchFonts,dpi,bottom,height);
+            var placements=BenchBadgeLayout.Calculate(area,Screen.FromHandle(handle).WorkingArea,cards.Select(c=>c.BenchIndex).ToArray(),null,1,bottom,height);
             bool changed=false;
             for(int i=0;i<cards.Length;i++){
                 var r=placements[i].Bounds;r.Offset(-area.X,-area.Y);

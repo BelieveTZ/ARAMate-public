@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -83,20 +83,51 @@ namespace ConfidenceDesktop {
             path.AddLine((float)SelectionMatcher.ArcLeft(card,bottom,true)+dx,bottom+dy,(float)SelectionMatcher.ArcLeft(card,bottom,false)+dx,bottom+dy);
             path.AddArc(cx-inner,cy-inner,2*inner,2*inner,innerBottom,innerTop-innerBottom);path.CloseFigure();return path;
         }
+        public static float TeamTextShift(CardResult card){return card.ArcDepth*10f/58;}
+        public static GraphicsPath TextArcPath(CardResult card,Rectangle bounds){return ArcPath(new CardResult{Bounds=card.Bounds,ArcCenterX=card.ArcCenterX,ArcCenterY=card.ArcCenterY,ArcRadius=card.ArcRadius,ArcDepth=card.ArcDepth+TeamTextShift(card)},bounds);}
+        public static float BenchScale(Rectangle bounds){return bounds.Height/15f;}
+        public static float BenchPadding(Rectangle bounds){return BenchScale(bounds);}
+        public static float BenchGap(Rectangle bounds){return 3*BenchScale(bounds);}
+        static void OutlinedText(Graphics g,string text,Font font,Color color,RectangleF area,StringAlignment align=StringAlignment.Center){
+            using(var format=new StringFormat(StringFormat.GenericTypographic)){format.Alignment=align;format.LineAlignment=StringAlignment.Center;format.FormatFlags|=StringFormatFlags.NoWrap;
+                using(var path=new GraphicsPath()){
+                    path.AddString(text??"",font.FontFamily,(int)font.Style,font.Size,area,format);
+                    using(var outline=new Pen(Color.FromArgb(235,6,10,14),Math.Max(1,font.Size/13f)){LineJoin=LineJoin.Round}){outline.LineJoin=LineJoin.Round;g.DrawPath(outline,path);}
+                    using(var brush=new SolidBrush(color))g.FillPath(brush,path);
+                }
+            }
+        }
+        static void ArcOutlinedText(Graphics g,string text,Font font,Color color,RectangleF area,CardResult card,Rectangle bounds){
+            using(var path=new GraphicsPath())using(var format=new StringFormat(StringFormat.GenericTypographic))using(var outline=new Pen(Color.FromArgb(235,6,10,14),Math.Max(1,font.Size/13f)){LineJoin=LineJoin.Round}){
+                format.Alignment=StringAlignment.Center;format.LineAlignment=StringAlignment.Center;format.FormatFlags|=StringFormatFlags.NoWrap;path.AddString(text,font.FontFamily,(int)font.Style,font.Size,area,format);
+                var ink=path.GetBounds();ink.Inflate(outline.Width/2,outline.Width/2);double globalY=(ink.Top+ink.Bottom)/2+card.Bounds.Y-bounds.Y;
+                float target=(float)(SelectionMatcher.PosterEdgeX(card,globalY)-card.ArcDepth*8/58)+bounds.X-card.Bounds.X;
+                using(var move=new Matrix()){move.Translate(target-ink.Right,0);path.Transform(move);}g.DrawPath(outline,path);using(var brush=new SolidBrush(color))g.FillPath(brush,path);
+            }
+        }
         static void ArcBadge(Graphics g,Rectangle bounds,CardResult card){
-            using(var path=ArcPath(card,bounds)){var saved=g.Save();g.SetClip(path,CombineMode.Intersect);using(var brush=new SolidBrush(DesktopTheme.Surface))g.FillPath(brush,path);using(var pen=new Pen(DesktopTheme.Line))g.DrawPath(pen,path);
-                double y=card.Bounds.Top+card.Bounds.Height/2.0;float center=(float)((SelectionMatcher.ArcLeft(card,y,true)+SelectionMatcher.ArcLeft(card,y,false))/2)+bounds.X-card.Bounds.X;
+            using(var path=TextArcPath(card,bounds)){var saved=g.Save();g.SetClip(path,CombineMode.Intersect);
+                double y=card.Bounds.Top+card.Bounds.Height/2.0;float center=(float)((SelectionMatcher.ArcLeft(card,y,true)+SelectionMatcher.ArcLeft(card,y,false))/2)+bounds.X-card.Bounds.X-TeamTextShift(card);
                 float textWidth=card.ArcDepth-4,cy=bounds.Y+bounds.Height/2f,size=Math.Min(13,card.Bounds.Height/4f);
                 using(var format=new StringFormat{Alignment=StringAlignment.Center,LineAlignment=StringAlignment.Center,FormatFlags=StringFormatFlags.NoWrap})while(size>8){using(var font=new Font("Microsoft YaHei UI",size,FontStyle.Bold,GraphicsUnit.Pixel))if(new[]{"#888","100.0%",card.Row==null?"暂无":"#"+card.Row.Rank,card.Row==null?"数据":Statistics.Pct(card.Row.Lower)}.All(text=>g.MeasureString(text,font,int.MaxValue,format).Width<=textWidth))break;size=Math.Max(8,size-.5f);}
                 using(var font=new Font("Microsoft YaHei UI",size,FontStyle.Bold,GraphicsUnit.Pixel)){
-                    Text(g,card.Row==null?"暂无":"#"+card.Row.Rank,font,card.Row==null?DesktopTheme.Muted:Gold,new RectangleF(center-textWidth/2,cy-24,textWidth,24));
-                    Text(g,card.Row==null?"数据":Statistics.Pct(card.Row.Lower),font,card.Row==null?DesktopTheme.Muted:RateColor(card.Row.Lower),new RectangleF(center-textWidth/2,cy,textWidth,24));
+                    ArcOutlinedText(g,card.Row==null?"暂无":"#"+card.Row.Rank,font,card.Row==null?DesktopTheme.Muted:Gold,new RectangleF(center-textWidth/2,cy-24,textWidth,24),card,bounds);
+                    ArcOutlinedText(g,card.Row==null?"数据":Statistics.Pct(card.Row.Lower),font,card.Row==null?DesktopTheme.Muted:RateColor(card.Row.Lower),new RectangleF(center-textWidth/2,cy,textWidth,24),card,bounds);
                 }g.Restore(saved);
             }
         }
         public static float BenchTextWidth(Graphics g,string text,Font font){
             if(string.IsNullOrEmpty(text))return 0;
-            using(var format=new StringFormat(StringFormat.GenericTypographic)){format.FormatFlags|=StringFormatFlags.NoWrap;return g.MeasureString(text,font,int.MaxValue,format).Width;}
+            using(var path=new GraphicsPath())using(var format=new StringFormat(StringFormat.GenericTypographic))using(var outline=new Pen(Color.Black,Math.Max(1,font.Size/13f)){LineJoin=LineJoin.Round}){
+                format.FormatFlags|=StringFormatFlags.NoWrap;path.AddString(text,font.FontFamily,(int)font.Style,font.Size,PointF.Empty,format);return path.GetBounds().Width+outline.Width;
+            }
+        }
+        static void BenchOutlinedText(Graphics g,string text,Font font,Color color,RectangleF area,StringAlignment align){
+            using(var path=new GraphicsPath())using(var format=new StringFormat(StringFormat.GenericTypographic))using(var outline=new Pen(Color.FromArgb(235,6,10,14),Math.Max(1,font.Size/13f)){LineJoin=LineJoin.Round}){
+                format.FormatFlags|=StringFormatFlags.NoWrap;path.AddString(text??"",font.FontFamily,(int)font.Style,font.Size,PointF.Empty,format);var ink=path.GetBounds();ink.Inflate(outline.Width/2,outline.Width/2);
+                float x=align==StringAlignment.Near?area.Left:align==StringAlignment.Far?area.Right-ink.Width:area.Left+(area.Width-ink.Width)/2;
+                using(var move=new Matrix()){move.Translate(x-ink.Left,area.Top+(area.Height-ink.Height)/2-ink.Top);path.Transform(move);}outline.LineJoin=LineJoin.Round;g.DrawPath(outline,path);using(var brush=new SolidBrush(color))g.FillPath(brush,path);
+            }
         }
         static void BenchText(Graphics g,string text,Font font,Color color,RectangleF area){
             using(var format=new StringFormat(StringFormat.GenericTypographic)){format.Alignment=StringAlignment.Center;format.LineAlignment=StringAlignment.Center;format.FormatFlags|=StringFormatFlags.NoWrap;
@@ -109,33 +140,40 @@ namespace ConfidenceDesktop {
                 if(Math.Max(BenchTextWidth(g,rank,font),BenchTextWidth(g,rate,font))<=width-4)break;
             }size=Math.Max(12,size-.25f);}return size;
         }
+        static object benchRows;static string worstBenchRank="#104",worstBenchRate="49.9%";
+        public static void ConfigureBenchMetrics(IEnumerable<Row> rows){
+            if(ReferenceEquals(benchRows,rows))return;benchRows=rows;
+            using(var bitmap=new Bitmap(1,1))using(var g=Graphics.FromImage(bitmap))using(var font=new Font("Microsoft YaHei UI",8,FontStyle.Bold,GraphicsUnit.Pixel)){
+                var actual=rows.Where(r=>r.Rank>0&&!double.IsNaN(r.Lower)).ToArray();
+                worstBenchRank=actual.Select(r=>"#"+r.Rank).OrderByDescending(t=>BenchTextWidth(g,t,font)).FirstOrDefault()??"#173";
+                worstBenchRate=actual.Select(r=>Statistics.Pct(r.Lower)).OrderByDescending(t=>BenchTextWidth(g,t,font)).FirstOrDefault()??"53.2%";
+            }
+        }
+        public static string BenchRateText(Graphics g,Rectangle bounds,string rank,string rate){return rate??"";}
+        public static bool BenchKeepsHash(Graphics g,Rectangle bounds){
+            float scale=BenchScale(bounds),width=(float)Math.Round(1280*scale*SelectionMatcher.BenchWidths.Min())-2-2*BenchPadding(bounds);
+            using(var font=new Font("Microsoft YaHei UI",8*scale,FontStyle.Bold,GraphicsUnit.Pixel))return BenchTextWidth(g,worstBenchRank,font)+BenchTextWidth(g,worstBenchRate,font)+BenchGap(bounds)<=width;
+        }
+        public static string BenchRankText(Graphics g,Rectangle bounds,int rank){return (BenchKeepsHash(g,bounds)?"#":"")+rank;}
         public static float BenchFontSize(Graphics g,Rectangle bounds,string rank,string rate){
-            float size=Math.Max(1,bounds.Height-2);
-            while(size>1){using(var font=new Font("Microsoft YaHei UI",size,FontStyle.Bold,GraphicsUnit.Pixel)){
-                float width=BenchTextWidth(g,rank,font)+BenchTextWidth(g,rate,font)+(rank.Length==0?0:size*.4f);
-                if(font.GetHeight(g)<=bounds.Height-2&&width<=bounds.Width-4)break;
-            }size=Math.Max(1,size-.25f);}return size;
+            float scale=BenchScale(bounds),minimum=8*scale,available=(float)Math.Round(1280*scale*SelectionMatcher.BenchWidths.Min())-2-2*BenchPadding(bounds);
+            string worstRank=BenchKeepsHash(g,bounds)?worstBenchRank:worstBenchRank.TrimStart('#');float size=10*scale;
+            while(true){using(var font=new Font("Microsoft YaHei UI",size,FontStyle.Bold,GraphicsUnit.Pixel)){
+                if(font.GetHeight(g)<=bounds.Height-2&&BenchTextWidth(g,worstRank,font)+BenchTextWidth(g,worstBenchRate,font)+BenchGap(bounds)<=available)return size;
+            }if(size<=minimum)return minimum;size=Math.Max(minimum,size-.25f);}
         }
         static void Compact(Graphics g,Rectangle bounds,CardResult result){
             if(result.BenchSlot){
-                Panel(g,bounds);
-                if(result.BenchOutside){
-                    using(var font=new Font("Microsoft YaHei UI",result.BenchFont,FontStyle.Bold,GraphicsUnit.Pixel)){
-                        float rowHeight=(bounds.Height-4)/2f;
-                        BenchText(g,result.Row==null?"暂无":"#"+result.Row.Rank,font,result.Row==null?DesktopTheme.Muted:Gold,new RectangleF(bounds.X+2,bounds.Y+2,bounds.Width-4,rowHeight));
-                        BenchText(g,result.Row==null?"数据":Statistics.Pct(result.Row.Lower),font,result.Row==null?DesktopTheme.Muted:RateColor(result.Row.Lower),new RectangleF(bounds.X+2,bounds.Y+2+rowHeight,bounds.Width-4,rowHeight));
-                    }return;
-                }
-                string rank=result.Row==null?"":"#"+result.Row.Rank,rate=result.Row==null?"暂无数据":Statistics.Pct(result.Row.Lower);
+                string rank=result.Row==null?"":BenchRankText(g,bounds,result.Row.Rank),rate=result.Row==null?"暂无数据":Statistics.Pct(result.Row.Lower);
+                rate=BenchRateText(g,bounds,rank,rate);
                 float benchSize=BenchFontSize(g,bounds,rank,rate);
                 using(var font=new Font("Microsoft YaHei UI",benchSize,FontStyle.Bold,GraphicsUnit.Pixel)){
-                    var area=new RectangleF(bounds.X+2,bounds.Y+1,bounds.Width-4,bounds.Height-2);
-                    if(result.Row==null)BenchText(g,rate,font,DesktopTheme.Muted,area);
+                    var area=new RectangleF(bounds.X+BenchPadding(bounds),bounds.Y+1,bounds.Width-2*BenchPadding(bounds),bounds.Height-2);
+                    if(result.Row==null)BenchOutlinedText(g,rate,font,DesktopTheme.Muted,area,StringAlignment.Center);
                     else{
-                        float rankWidth=BenchTextWidth(g,rank,font),rateWidth=BenchTextWidth(g,rate,font),gap=benchSize*.4f;
-                        float left=bounds.X+(bounds.Width-rankWidth-rateWidth-gap)/2;
-                        BenchText(g,rank,font,Gold,new RectangleF(left,area.Y,rankWidth,area.Height));
-                        BenchText(g,rate,font,RateColor(result.Row.Lower),new RectangleF(left+rankWidth+gap,area.Y,rateWidth,area.Height));
+                        float rankWidth=BenchTextWidth(g,rank,font),rateWidth=BenchTextWidth(g,rate,font);
+                        BenchOutlinedText(g,rank,font,Gold,new RectangleF(area.Left,area.Y,rankWidth,area.Height),StringAlignment.Near);
+                        BenchOutlinedText(g,rate,font,RateColor(result.Row.Lower),new RectangleF(area.Right-rateWidth,area.Y,rateWidth,area.Height),StringAlignment.Far);
                     }
                 }return;
             }
