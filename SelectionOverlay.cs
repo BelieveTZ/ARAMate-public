@@ -170,7 +170,7 @@ namespace ConfidenceDesktop {
         public static List<Row> ReasonableSkillOrders(IEnumerable<Row> source){
             var ranked=source.Where(r=>r.Rank>0).OrderBy(r=>r.Rank).ToList();
             if(ranked.Count==0)return ranked;
-            return ranked.Where((row,index)=>index==0||(!double.IsNaN(row.Pick)&&row.Pick>=.10-1e-12)).Take(4).ToList();
+            return ranked.Where((row,index)=>index==0||(!double.IsNaN(row.Pick)&&row.Pick>=.10-1e-12&&row.GainLower>=0)).Take(4).ToList();
         }
         public static List<Row> NearBest(IEnumerable<Row> source){
             var ranked=source.Where(r=>r.Rank>0).ToList();if(ranked.Count==0)return ranked;
