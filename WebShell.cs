@@ -66,13 +66,15 @@ namespace ConfidenceDesktop {
         }
         // The number-line gradient ends in the high end's own rate color (same scale as the shown values).
         void SaveStatisticsMode(){StatisticsSettings.Save(advancedMode);cachedWebRows=null;cachedOverview=null;ScheduleWeb();}
+        // Theme swatch background: halfway between the bottom layer (bg) and the table (panel). bg alone makes every theme look black; panel blends into the menu.
+        static string SwatchBackground(ThemePalette p){Color a=p["bg"],b=p["panel"];return "#"+((a.R+b.R)/2).ToString("x2")+((a.G+b.G)/2).ToString("x2")+((a.B+b.B)/2).ToString("x2");}
         static object RangeColor(double value){return double.IsNaN(value)?null:ColorTranslator.ToHtml(BadgePaint.RateColor(value));}
         static object WebNumber(double value){return double.IsNaN(value)||double.IsInfinity(value)?null:(object)value;}
         // Main-window statistics mode (2.0.0): advanced shows the statistical values with number lines, simple shows observed values only.
         // The levels are the fixed ones recommendations and overlays use, so every number matches the game (no user choice: the user decided
         // a level picker that leaves in-game recommendations unchanged would disappoint).
         bool advancedMode=true;
-        const double WinLevel=.99,GainLevel=.95;
+        const double WinLevel=.99,GainLevel=.99;
         string StatisticsMode{get{return advancedMode?"advanced":"simple";}}
         Dictionary<string,object> StatsAt(Row row){
             if(row==null||row.Raw==null)return null;
@@ -218,7 +220,7 @@ namespace ConfidenceDesktop {
                 rows=cachedWebRows,icons=WebIcons(),imageRevision=webImageRevision,
                 empty=data.Heroes.Count==0?WebsiteUpdateStatus.EmptyText(webUpdatePhase):group!=null&&group.Path=="champions/augmentCombinations"?"暂无值得推荐的海克斯组合":emptyRoutes.Text,version=AppVersion.Display,gameVersion=data.Version,date=data.Date,
                 connection=clientStatus==null?"未检测到客户端":ConnectionText(clientStatus,data),updating=updating,updateStatus=WebsiteUpdateStatus.Text(webUpdatePhase,webUpdateManual,data.Version,data.Date,webUpdateProgress),progress=webUpdateProgress,
-                shopStatus=new {kind=shopSession.DisplayKind,count=shopSession.ImportedCount,error=shopSession.Error},autoImportShop=shopSession.AutoImportEnabled,autoMinimize=autoMinimize,theme=ThemeManager.Current.Id,palette=ThemeManager.Current.Css(),skillMode=hudSkillMode.SelectedIndex,closeToTray=minimizeToTray,status=status.Text
+                shopStatus=new {kind=shopSession.DisplayKind,count=shopSession.ImportedCount,error=shopSession.Error},autoMinimize=autoMinimize,theme=ThemeManager.Current.Id,palette=ThemeManager.Current.Css(),themes=ThemePalette.All.Select(p=>{var css=p.Css();return new {id=p.Id,name=p.Name,bg=SwatchBackground(p),accent=css["gold"]};}).ToArray(),skillMode=hudSkillMode.SelectedIndex,closeToTray=minimizeToTray,status=status.Text
             });
         }
         void PublishWeb() {
@@ -267,7 +269,7 @@ namespace ConfidenceDesktop {
                     case "advanced":advancedMode=value=="1";SaveStatisticsMode();break;
                     case "skillMode":if(int.TryParse(value,out number)&&number>=0&&number<3)hudSkillMode.SelectedIndex=number;break;
                     case "closeMode":minimizeToTray=value=="1";CloseBehaviorSettings.Save(minimizeToTray);break;
-                    case "autoImportShop":shopSession.SetAutoImport(value=="1");break;
+                    
                     case "autoMinimize":autoMinimize=value=="1";AutoMinimizeSettings.Save(autoMinimize);break;
                     case "gameDirectory":string setup=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"设置游戏目录.exe");if(!File.Exists(setup))throw new FileNotFoundException("未找到设置游戏目录.exe，请重新安装程序。",setup);System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(setup){UseShellExecute=true,WorkingDirectory=AppDomain.CurrentDomain.BaseDirectory});break;
                     case "check":await UpdateWebWebsite(true);break;

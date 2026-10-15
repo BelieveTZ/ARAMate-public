@@ -76,7 +76,7 @@ namespace ConfidenceDesktop {
             double upper=other==remaining?1:1-BetaQuantile(.005,remaining-other,other+1);
             return remaining/N*(lower-upper);
         }
-        // Conditional on disjoint binomial groups; union of exact 97.5% one-sided bounds.
+        // Conditional on disjoint binomial groups; union of exact 99.5% one-sided bounds (the difference holds with at least 99%, 2.0.2 on; was 97.5% each).
         // Optimize over every feasible integer win count allowed by published rounding.
         public static double ComparativeGain(object option,object population){
             double n,a0,a1,N,t0,t1;
@@ -85,21 +85,21 @@ namespace ConfidenceDesktop {
             if(selected>Math.Min(a1,t1))return double.NaN;
             double total=Math.Min(t1,selected+remaining),other=total-selected;
             if(total<t0||other<0||other>remaining)return double.NaN;
-            double lower=selected==0?0:BetaQuantile(.025,selected,n-selected+1);
-            double upper=other==remaining?1:1-BetaQuantile(.025,remaining-other,other+1);
+            double lower=selected==0?0:BetaQuantile(.005,selected,n-selected+1);
+            double upper=other==remaining?1:1-BetaQuantile(.005,remaining-other,other+1);
             return lower-upper;
         }
         // Compare this row directly with the hero average, using published integer-win ranges.
         public static double AverageGain(object option,object hero){
             double n,a0,a1,N,t0,t1;
             if(!WinRange(option,out n,out a0,out a1)||!WinRange(hero,out N,out t0,out t1))return double.NaN;
-            double lower=a0==0?0:BetaQuantile(.025,a0,n-a0+1);
-            double upper=t1==N?1:1-BetaQuantile(.025,N-t1,t1+1);
+            double lower=a0==0?0:BetaQuantile(.005,a0,n-a0+1);
+            double upper=t1==N?1:1-BetaQuantile(.005,N-t1,t1+1);
             return lower-upper;
         }
-        // Display-only bounds with their high ends (2.0.0); the main window uses the fixed levels (.99 win rate, .95 gain).
+        // Display-only bounds with their high ends (2.0.0); the main window uses the fixed levels (.99 win rate, .99 gain since 2.0.2).
         // Recommendation, filtering and ordering never read these.
-        // At .99 the win-rate low end equals Calculate(row).Lower; at .95 the gain low end equals ComparativeGain / AverageGain.
+        // At .99 the win-rate low end equals Calculate(row).Lower; at .99 the gain low end equals ComparativeGain / AverageGain.
         public struct Interval{public double Lower,Upper,Point;public static readonly Interval Empty=new Interval{Lower=double.NaN,Upper=double.NaN,Point=double.NaN};}
         // One-sided normal quantile of each level; .99 is the Z that Calculate uses.
         public static double ZFor(double level){return level==.975?1.959963984540054:level==.95?1.6448536269514722:level==.90?1.2815515655446004:Z;}
