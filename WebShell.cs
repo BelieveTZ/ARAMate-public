@@ -221,7 +221,7 @@ namespace ConfidenceDesktop {
                 rarity=rarity.SelectedIndex,query=augmentSearch.Text,
                 columns=columns.Select(c=>new {text=group!=null&&c.Index==2&&group.RateTitle!=null?group.RateTitle:group!=null&&c.Index==3&&group.GainTitle!=null?group.GainTitle:c.HeaderText,index=c.Index}).ToArray(),
                 rows=cachedWebRows,icons=WebIcons(),imageRevision=webImageRevision,
-                empty=data.Heroes.Count==0?WebsiteUpdateStatus.EmptyText(webUpdatePhase):group!=null&&group.Path=="champions/augmentCombinations"?"暂无值得推荐的海克斯组合":emptyRoutes.Text,version=AppVersion.Display,gameVersion=data.Version,date=data.Date,
+                empty=data.Heroes.Count==0?WebsiteUpdateStatus.EmptyText(webUpdatePhase):group!=null&&group.Path=="champions/augmentCombinations"?"无优秀联动":emptyRoutes.Text,version=AppVersion.Display,gameVersion=data.Version,date=data.Date,
                 connection=clientStatus==null?"未检测到客户端":ConnectionText(clientStatus,data),updating=updating,updateStatus=WebsiteUpdateStatus.Text(webUpdatePhase,webUpdateManual,data.Version,data.Date,webUpdateProgress),progress=webUpdateProgress,
                 shopStatus=new {kind=shopSession.DisplayKind,count=shopSession.ImportedCount,error=shopSession.Error},autoMinimize=autoMinimize,theme=ThemeManager.Current.Id,palette=ThemeManager.Current.Css(),themes=ThemePalette.All.Select(p=>{var css=p.Css();return new {id=p.Id,name=p.Name,bg=SwatchBackground(p),accent=css["gold"]};}).ToArray(),skillMode=hudSkillMode.SelectedIndex,closeToTray=minimizeToTray,status=status.Text
             });

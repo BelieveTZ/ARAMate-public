@@ -31,7 +31,7 @@ table{border-collapse:collapse;width:100%;table-layout:fixed;text-align:center}t
 .stat-table{table-layout:auto}.stat-table th,.stat-table td{width:1%}.stat-table .name-column{width:auto;text-align:center}.stat-table td.name-column{text-align:center}.name-block{display:inline-block;text-align:left;vertical-align:middle}.stat-table .name-column .herolink,.stat-table .name-column .augment-entry{width:auto!important}
 th.sortable{cursor:pointer;user-select:none}th.sortable:hover{color:var(--gold)}th.sortable[aria-sort]{color:var(--gold)}.th-label{position:relative}.sort-mark{position:absolute;left:100%;top:50%;transform:translateY(-50%);margin-left:3px;font-size:10px;line-height:1}
 .metric{display:flex;align-items:center;justify-content:flex-end;gap:10px;width:max-content;margin:0 auto}.observed-value{display:inline-block;text-align:center}.metric .value{min-width:58px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums}.metric .value{position:relative}.has-overall td.metric-cell,.has-overall th.metric-head{padding-left:66px}.metric .overall-label{position:absolute;right:100%;top:50%;transform:translateY(-50%);margin-right:4px;font-weight:700;white-space:nowrap}
-.axis{position:relative;display:block;width:96px;height:18px;flex-shrink:0;overflow:hidden}.axis .base{position:absolute;left:0;right:0;top:8px;height:2px;background:var(--separator)}.axis .band{position:absolute;top:6px;height:6px;opacity:.35}.axis .low{position:absolute;top:2px;width:3px;height:14px;margin-left:-1px}.axis .high{position:absolute;top:2px;width:2px;height:14px;margin-left:-1px;background:repeating-linear-gradient(to bottom,currentColor 0 2px,transparent 2px 4px)}.axis .point{position:absolute;top:2px;width:2px;height:14px;margin-left:-1px;background:var(--muted)}
+.axis{position:relative;display:block;width:96px;height:18px;flex-shrink:0;overflow:hidden}.axis .base{position:absolute;left:0;right:0;top:8px;height:2px;background:var(--separator)}.axis .band{position:absolute;top:6px;height:6px;opacity:.35}.axis .low{position:absolute;top:2px;width:3px;height:14px;margin-left:-1px}.axis .high{position:absolute;top:2px;width:3px;height:14px;margin-left:-1px;background:repeating-linear-gradient(to bottom,currentColor 0 2px,transparent 2px 4px)}.axis .cap{position:absolute;top:2px;width:8px;height:14px;margin-left:-1px;font-size:18px;line-height:14px;text-align:center}.axis .point{position:absolute;top:2px;width:2px;height:14px;margin-left:-1px;background:var(--muted)}
 td.observed{color:var(--muted);font-size:14px;text-align:center;font-variant-numeric:tabular-nums}th.observed{text-align:center}.stat-table.simple .name-column{width:36%}.stat-table.simple th.observed,.stat-table.simple td.observed{width:auto}.stat-table.simple td.observed{color:var(--text);font-size:15px}.stat-table.simple td.observed.lead{font-weight:700}
 .herolink{font-size:inherit;border:0;background:none;color:var(--text);padding:0;text-align:left;font-weight:700}.herolink:hover{background:none;color:var(--gold)}.herolink:hover .hero-name,.suggestions button:hover .hero-name,.suggestions button:focus .hero-name{color:var(--gold)}.hero-cell{text-align:left}.hero-cell .herolink{display:inline-flex}
 .effect{cursor:default}.effect:hover{color:var(--gold)}.sequence{white-space:pre-wrap;line-height:1.3}.arrow{color:var(--arrow);padding:0 3px}.empty{text-align:center;color:var(--muted);padding:48px 20px}.loading{padding:48px;text-align:center;color:var(--muted)}
@@ -119,16 +119,17 @@ function buttons(parent,items,selected,action){const key=JSON.stringify([items,s
 const num=v=>typeof v==='number'&&Number.isFinite(v);
 const pct=v=>num(v)?(v*100).toFixed(1)+'%':'—';
 const signed=v=>{if(!num(v))return '—';const p=Math.round(v*1000)/10;return (p>0?'+':'')+p.toFixed(1)+'%';};
-const games=v=>num(v)?Math.round(v).toLocaleString('zh-CN'):'—';
+const games=v=>num(v)?String(Math.round(v)):'—';
 function metricKind(text){return /提升/.test(text||'')?'gain':/胜率/.test(text||'')?'win':null;}
 function metricRange(stats,kind){if(!stats)return null;return kind==='gain'?{low:stats.gain,high:stats.gainUpper,point:stats.gainPoint,highColor:stats.gainUpperColor}:{low:stats.lower,high:stats.upper,point:stats.win,highColor:stats.upperColor};}
-// Each row's axis is zoomed to its own range so the low end, the observed point and the high end stay apart.
+// Hover axes zoom to one row; table axes share pixels per percentage point within each column.
 function rangeDomain(range){const lo=range.low,hi=Math.max(num(range.high)?range.high:lo,num(range.point)?range.point:lo),pad=Math.max(hi-lo,.002)*.1;return [lo-pad,hi+pad];}
 const inRange=(range,v)=>num(v)&&num(range?.low)&&num(range?.high)&&v>=range.low&&v<=range.high;
-function axisNode(range,domain,ref,color,cls='axis'){const node=el('span',null,cls),span=domain[1]-domain[0]||1,at=v=>Math.max(0,Math.min(100,(v-domain[0])/span*100));node.append(el('span',null,'base'));
+function axisNode(range,domain,ref,color,cls='axis',ratio=null){const capped=ratio!==null&&ratio>1;if(capped)ratio=1;const node=el('span',null,cls),span=domain[1]-domain[0]||1,at=v=>Math.max(0,Math.min(100,(v-domain[0])/span*100)),position=v=>ratio===null?at(v)+'%':'calc(8px + var(--axis-length) * '+at(v)/100+')',base=el('span',null,'base');
+ if(ratio!==null){node.style.setProperty('--axis-length','max(12px, calc((100% - 16px) * '+ratio+'))');base.style.right='auto';base.style.width='calc(16px + var(--axis-length))';}node.append(base);
  // Colored marks are the statistical range (solid low end = the shown value, dashed high end); the gray mark is the observed value, like the gray observed columns.
- if(range&&num(range.low)){if(num(range.high)){const band=el('span',null,'band');band.style.left=at(range.low)+'%';band.style.width='calc('+Math.max(0,at(range.high)-at(range.low))+'% + 1px)';band.style.background='linear-gradient(to right,'+color+','+(range.highColor||color)+')';node.append(band);const high=el('span',null,'high');high.style.left=at(range.high)+'%';high.style.color=range.highColor||color;node.append(high);}const low=el('span',null,'low');low.style.left=at(range.low)+'%';low.style.background=color;node.append(low);}
- if(range&&num(range.point)){const dot=el('span',null,'point');dot.style.left=at(range.point)+'%';node.append(dot);}
+ if(range&&num(range.low)){if(num(range.high)){const band=el('span',null,'band');band.style.left=position(range.low);band.style.width=ratio===null?'calc('+Math.max(0,at(range.high)-at(range.low))+'% + 2px)':'calc(var(--axis-length) + 2px)';band.style.background='linear-gradient(to right,'+color+','+(range.highColor||color)+')';node.append(band);const high=el('span',capped?'\u203a':null,capped?'cap':'high');high.style.left=ratio===null?position(range.high):'calc(8px + var(--axis-length))';high.style.color=range.highColor||color;node.append(high);}const low=el('span',null,'low');low.style.left=position(range.low);low.style.background=color;node.append(low);}
+ if(range&&num(range.point)){const dot=el('span',null,'point');dot.style.left=position(range.point);node.append(dot);}
  node.at=at;return node;}
 function renderAxisTip(tip,a){tip.className='tooltip axis-tip';tip.replaceChildren();const gain=a.kind==='gain',f=gain?signed:pct;
  const lo=a.range.low,hi=a.range.high,point=a.range.point,line=axisNode(a.range,rangeDomain(a.range),a.ref,a.color);
@@ -254,7 +255,9 @@ function buildTable(root,s,sorting){root.replaceChildren();root.style.background
  const statisticColumn=c=>statistical&&c.index>=2&&!(gain&&c.index===2)&&!!metricKind(c.text);
  const hideGain=/^champions\/(summoners|skills)$/.test(s.group);
  const metrics=s.columns.map(c=>advanced&&statisticColumn(c)?metricKind(c.text):null),shown=s.columns.map(c=>(advanced||!statisticColumn(c))&&!(hideGain&&metricKind(c.text)==='gain'));
- const scale=metrics.map(kind=>kind?{kind,ref:kind==='gain'?0:s.home?.5:gain?null:s.heroWin}:null);
+ const rangeWidth=range=>range&&num(range.low)&&num(range.high)?Math.max(0,range.high-range.low):0;
+ const columnScale=kind=>{const widths=s.rows.map(r=>metricRange(r.stats,kind)).filter(r=>r&&num(r.low)&&num(r.high)&&r.high>=r.low).map(rangeWidth).sort((a,b)=>a-b);return widths.length?widths[widths.length<4?widths.length-1:Math.ceil(widths.length*.75)-1]:0;};
+ const scale=metrics.map(kind=>kind?{kind,width:columnScale(kind),ref:kind==='gain'?0:s.home?.5:gain?null:s.heroWin}:null);
  const observed=statistical?[...(!advanced&&gain?[['gainPoint','实际提升']]:[]),['win','实际胜率'],['count','场次'],['pick','选取率']].filter(([key])=>s.rows.some(r=>num(r.stats?.[key]))):[];
  const header=(text,cls,key)=>{const th=el('th',null,cls);th.append(el('span',text,'th-label'));if(key){th.classList.add('sortable');th.dataset.sort=key;th.title='点击排序';th.onclick=()=>{sorting.state={group:sortGroup,key,dir:sorting.state.key===key?-sorting.state.dir:-1};applySort();};}return th;};
  s.columns.forEach((c,i)=>{if(!shown[i])return;const col=el('col');if(!statistical){if(c.index===0)col.style.width=c.text==='排名'?'76px':c.text==='评级'?'90px':'175px';if(c.index>=2)col.style.width=c.text==='评级'?'110px':c.index===2?'150px':'166px';}cols.append(col);
@@ -265,7 +268,7 @@ function buildTable(root,s,sorting){root.replaceChildren();root.style.background
    if(s.group==='champions/equipment/plans'&&index===0){td.classList.add('plan-cell');if(isRegularPlan(c.text))td.classList.add('regular-plan');}
    if(kind){const range=metricRange(r.stats,kind),scaleInfo=scale[i],metric=el('div',null,'metric'),value=el('span',c.text,'value'),color=c.color||'var(--text)';value.style.color=c.color||'';metric.append(value);
     const overall=r.overall===true&&/^champions\/augments\/stages\/[1-4]$/.test(s.group);if(overall){const note=el('span','（总体）','overall-label');note.style.color=c.color||'';value.append(note);table.classList.add('has-overall');}
-    if(range&&num(range.low))metric.append(axisNode(range,rangeDomain(range),scaleInfo.ref,color));td.className='num metric-cell';td.append(metric);
+    if(range&&num(range.low))metric.append(axisNode(range,[range.low,range.low+(scaleInfo.width&&rangeWidth(range)>scaleInfo.width?scaleInfo.width:rangeWidth(range))],scaleInfo.ref,color,'axis',scaleInfo.width?rangeWidth(range)/scaleInfo.width:0));td.className='num metric-cell';td.append(metric);
     td.metricInfo={kind,range:range||{},ref:scaleInfo.ref,color,count:r.stats?.count,overall,name:c===r.cells[1]?'':(r.cells[1]?.text||r.name||'')};td.dataset.tip='axis';td.tabIndex=0;}
    else if(index>=2&&!(gain&&index===2))td.className='num';
    if(!kind&&(index>=2||s.columns[i].text==='评级'))td.style.color=c.color||'';if(c.bold)td.style.fontWeight='bold';
@@ -299,7 +302,7 @@ function renderOverview(s){const o=s.overview||{},root=$('overview');hideTooltip
  const cols=names=>names.map((text,index)=>({text,index})),stat=name=>['排名',name,'统计学胜率','统计学胜率提升'];
  // Links only where the section shows more than its card: augments add stage filters, the core build adds the fifth and sixth items. Combinations are few, so their card shows them all.
  const cards=[['召唤师技能','','champions/summoners',stat('组合'),o.summoners,null,'',true],['技能加点','','champions/skills',stat('加点顺序'),o.skills,null,'',true],
-  ['海克斯','海克斯','champions/augments/all',stat('海克斯'),o.augments,null,'详细 ›'],['海克斯组合','','champions/augmentCombinations',stat('组合'),o.combinations,null,'',true],
+  ['海克斯','海克斯','champions/augments/all',stat('海克斯'),o.augments,null,'详细 ›'],['海克斯组合','','champions/augmentCombinations',stat('组合'),o.combinations,'无优秀联动','',true],
   ['核心出装','装备','champions/equipment/plans',['适用方案','核心出装顺序','第五件','第六件'],o.plansPending?[]:o.plans,o.plansPending?'正在计算核心出装…':'暂无核心出装','详细 ›']].map(([title,section,group,names,rows,empty,link,whole])=>{
   const c=el('section',null,'card'),h=el('h3',title),body=el('div',null,'tablewrap ov-table'+(whole?' whole':''));if(link){const more=el('button',link,'more');more.onclick=()=>send('section',section);h.append(more);}c.dataset.group=group;c.append(h,body);root.append(c);
   return {body,state:{...s,home:false,group,columns:cols(names),rows:(rows||[]).map(r=>({heroId:s.heroId,...r})),empty:empty||'暂无数据'}};});
