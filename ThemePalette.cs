@@ -7,8 +7,7 @@ namespace ConfidenceDesktop {
     public sealed class ThemePalette {
         public readonly string Id, Name;
         readonly Dictionary<string,Color> colors;
-        ThemePalette overlay;
-        public ThemePalette Overlay {get{return overlay??this;}}
+        public ThemePalette Overlay {get{return Piltover;}}
         public bool IsLight {get{var bg=colors["bg"];return .2126*Linear(bg.R)+.7152*Linear(bg.G)+.0722*Linear(bg.B)>.5;}}
         public Color MainColor(Color color){if(!IsLight)return color;double luminance=.2126*Linear(color.R)+.7152*Linear(color.G)+.0722*Linear(color.B);while(luminance>.25){color=Color.FromArgb((int)(color.R*.95),(int)(color.G*.95),(int)(color.B*.95));luminance=.2126*Linear(color.R)+.7152*Linear(color.G)+.0722*Linear(color.B);}return color;}
         static double Linear(byte n){double v=n/255.0;return v<=.04045?v/12.92:Math.Pow((v+.055)/1.055,2.4);}
@@ -55,8 +54,9 @@ namespace ConfidenceDesktop {
                 var color=p.colors[key];int gray=(color.R+color.G+color.B)/3;p.colors[key]=Color.FromArgb(gray,gray,gray);
             }p.colors["accent-text"]=Hex("#080304");p.colors["selected-text"]=p.colors["accent-text"];return p;}
         public static readonly ThemePalette Demacia=CreateDemacia();
-        // Demacia: preserve the navy palette offsets from panel; white remains the accent.
-        static ThemePalette CreateDemacia(){Color basis=Hex("#0d1a5c");Func<int,int,int,string> blue=(r,g,b)=>ColorTranslator.ToHtml(Color.FromArgb(Clamp(basis.R+r),Clamp(basis.G+g),Clamp(basis.B+b)));var p=Create("demacia","德玛西亚",new[]{blue(-13,-17,-25),blue(0,0,0),blue(-8,-10,-14),blue(39,43,51),"#ffffff","#c3cbdc","#ffffff",blue(14,16,23),blue(8,9,13)});p.colors["outline"]=Hex("#060a0e");p.colors["desktop-text"]=Color.White;p.colors["desktop-muted"]=Hex("#c3cbdc");return p;}
+        // Demacia main-window navy, preserving the original relative palette offsets.
+        static ThemePalette CreateDemacia(){Color basis=Hex("#0b1533");Func<int,int,int,string> blue=(r,g,b)=>ColorTranslator.ToHtml(Color.FromArgb(Clamp(basis.R+r),Clamp(basis.G+g),Clamp(basis.B+b)));var p=Create("demacia","德玛西亚",new[]{blue(-13,-17,-25),blue(0,0,0),blue(-8,-10,-14),blue(39,43,51),"#ffffff","#c3cbdc","#ffffff",blue(14,16,23),blue(8,9,13)});p.colors["outline"]=Hex("#060a0e");p.colors["desktop-text"]=Color.White;p.colors["desktop-muted"]=Hex("#c3cbdc");p.colors["accent-text"]=basis;p.colors["selected-text"]=basis;return p;}
+
         public static readonly ThemePalette[] All={Piltover,Void,Shadow,Noxus,Demacia};
         public static ThemePalette Find(string id){return All.FirstOrDefault(p=>p.Id==id)??Piltover;}
     }
