@@ -102,6 +102,14 @@ namespace ConfidenceDesktop {
     class SmoothGrid:DataGridView {public SmoothGrid(){DoubleBuffered=true;}}
     class NavigationButton:ModernButton {public bool Selected,Primary;}
     partial class MainForm:Form {
+        // Opens 1200 CSS pixels wide so the gain board fits with full-length number lines. WebView2 lays out in CSS pixels and this
+        // process is per-monitor DPI aware, so the width follows the monitor's display scaling, capped by the work area; narrower
+        // windows (down to the 1140-pixel minimum) compact the tables instead.
+        const int DefaultCssWidth=1200,MinimumClientWidth=1140;
+        [DllImport("user32.dll")] static extern IntPtr MonitorFromPoint(Point point,uint flags);
+        [DllImport("shcore.dll")] static extern int GetDpiForMonitor(IntPtr monitor,int type,out uint dpiX,out uint dpiY);
+        public static int DefaultClientWidth(Point at){float scale=1;try{uint x,y;if(GetDpiForMonitor(MonitorFromPoint(at,2),0,out x,out y)==0&&x>0)scale=x/96f;}catch{}
+            int room=Screen.FromPoint(at).WorkingArea.Width-40;return Math.Max(MinimumClientWidth,Math.Min(room,(int)Math.Round(DefaultCssWidth*scale)));}
         bool minimizeToTray=CloseBehaviorSettings.Load(),exitRequested;
         bool autoMinimize=AutoMinimizeSettings.Load(),changingGameWindow;AutoMinimizeState gameWindow=new AutoMinimizeState();
         NotifyIcon trayIcon;FormWindowState restoreState=FormWindowState.Normal;
@@ -136,12 +144,12 @@ namespace ConfidenceDesktop {
             if(StartupTrace.ForceClassic){RestoreClassic("网页界面暂时不可用，已恢复基础界面。");StartupTrace.Mark("classic-visible-rows-"+grid.Rows.Count);}
         }
         public MainForm() {
-            ThemeManager.Select(ThemeSettings.Load());paintedTheme=ThemeManager.Current;
+            ThemeManager.Select(ThemeSettings.Load());paintedTheme=ThemeManager.Current;advancedMode=StatisticsSettings.Load();
             if(File.Exists(Path.Combine(DataStore.DefaultRoot,"website-state.json")))startupData=Task.Run(()=>{WebsiteData.PruneSnapshots(DataStore.DefaultRoot);var loaded=new DataStore();loaded.Load(DataStore.DefaultRoot);loaded.PrepareGainBoardsAsync();StartupTrace.Mark("data-loaded");return loaded;});
             HandleCreated+=(s,e)=>StartupTrace.Mark("handle-created");
             Shown+=(s,e)=>{StartupTrace.Mark("shown");if(StartupTrace.Enabled){var timeout=new Timer{Interval=StartupTrace.TimeoutDelay};timeout.Tick+=(a,b)=>{timeout.Stop();if(StartupTrace.HasRendered)return;StartupTrace.Mark("timeout");exitRequested=true;Close();};timeout.Start();FormClosed+=(a,b)=>timeout.Dispose();}};
             Icon=System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath);InitializeTray();
-            Text=AppVersion.ProductName;Size=new Size(1140,Math.Min(1200,Screen.FromPoint(Cursor.Position).WorkingArea.Height));MinimumSize=new Size(SizeFromClientSize(new Size(1140,0)).Width,520);ClientSize=new Size(1140,ClientSize.Height);Font=DesktopTheme.Body;StartPosition=FormStartPosition.CenterScreen;
+            Text=AppVersion.ProductName;Size=new Size(1140,Math.Min(1200,Screen.FromPoint(Cursor.Position).WorkingArea.Height));MinimumSize=new Size(SizeFromClientSize(new Size(1140,0)).Width,520);ClientSize=new Size(DefaultClientWidth(Cursor.Position),ClientSize.Height);Font=DesktopTheme.Body;StartPosition=FormStartPosition.CenterScreen;
             var layout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=6,Padding=new Padding(20,16,20,8)};
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute,94));layout.RowStyles.Add(new RowStyle(SizeType.Absolute,78));layout.RowStyles.Add(new RowStyle(SizeType.Absolute,40));layout.RowStyles.Add(new RowStyle(SizeType.Absolute,0));layout.RowStyles.Add(new RowStyle(SizeType.Percent,100));layout.RowStyles.Add(new RowStyle(SizeType.Absolute,30));Controls.Add(layout);
             var header=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=2,Margin=Padding.Empty};header.RowStyles.Add(new RowStyle(SizeType.Absolute,40));header.RowStyles.Add(new RowStyle(SizeType.Absolute,50));layout.Controls.Add(header,0,0);var navigation=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,Margin=Padding.Empty};header.Controls.Add(navigation,0,0);var first=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,Margin=Padding.Empty};header.Controls.Add(first,0,1);
@@ -277,7 +285,7 @@ namespace ConfidenceDesktop {
             filters.Controls.Clear();
             foreach(NavigationButton tab in tabs.Controls)StyleNavigation(tab,tab.Text==section);
             var options=new List<KeyValuePair<string,string>>();
-            // The web overview (1.18.0) has no table of its own; keep the augment groups selected underneath.
+            // The web overview (2.0.0) has no table of its own; keep the augment groups selected underneath.
             if(section=="海克斯"||section==OverviewSection){options.Add(new KeyValuePair<string,string>("总体","champions/augments/all"));for(int i=1;i<=4;i++)options.Add(new KeyValuePair<string,string>(new[]{"总体","一选","二选","三选","四选"}[i],"champions/augments/stages/"+i));}
             else if(section=="装备"){options.Add(new KeyValuePair<string,string>("核心出装",EquipmentRecommendations.Prefix+"plans"));for(int i=5;i<=6;i++)if(groups.Any(g=>g.Path==EquipmentRecommendations.Prefix+"later/"+i))options.Add(new KeyValuePair<string,string>("第"+i+"件",EquipmentRecommendations.Prefix+"later/"+i));}
             else {string path=section=="海克斯组合"?"champions/augmentCombinations":section=="召唤师技能"?"champions/summoners":"champions/skills";options.Add(new KeyValuePair<string,string>(section,path));}

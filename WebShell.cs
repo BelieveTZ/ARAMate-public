@@ -39,38 +39,69 @@ namespace ConfidenceDesktop {
             state["group"]=combination?"combination-gain-board":"augment-gain-board";
             state["columns"]=(combination?new[]{"名次","英雄","组合","统计学胜率提升","统计学胜率"}:new[]{"名次","英雄","海克斯","统计学胜率提升","统计学胜率"}).Select((text,index)=>new{text=text,index=index}).ToArray();
             state["empty"]=task.IsFaulted?"统计失败，请重新载入数据":task.IsCompleted?"暂无达标海克斯":"正在统计…";
-            state["rows"]=task.Status==TaskStatus.RanToCompletion?task.Result.Select((entry,index)=>new{
+            // Membership stays fixed; values, order and places follow the chosen level (advanced) or the observed gain (simple).
+            state["rows"]=task.Status==TaskStatus.RanToCompletion?ArrangeRows(task.Result,entry=>StatsAt(entry.Win,entry.Count,entry.Pick,Statistics.WinBounds(entry.WinCounts,WinLevel),
+                    Statistics.ComparativeBounds(entry.GainSelected,entry.GainPopulation,Statistics.GainAlpha(GainLevel))),true).Select(item=>{var entry=item.Item;return new{
                 heroId=entry.HeroId,title=entry.HeroTitle,name=entry.HeroName,icon=entry.HeroIcon,augmentId=entry.AugmentId,augmentIds=entry.AugmentIds,rarity=entry.Rarity,
-                cells=new[]{WebCell(Cell((index+1).ToString())),WebCell(Cell(entry.HeroName)),WebCell(Cell(entry.AugmentName,"augments",bold:true,iconId:combination?null:entry.AugmentId)),
-                    WebCell(Cell(Statistics.GainText(entry.GainLower),color:BadgePaint.RateColor(.5+entry.GainLower))),
-                    WebCell(Cell(Statistics.Pct(entry.Lower),color:BadgePaint.RateColor(entry.Lower)))},
-                stats=new Dictionary<string,object>{{"win",WebNumber(entry.Win)},{"count",WebNumber(entry.Count)},{"pick",WebNumber(entry.Pick)},{"lower",WebNumber(entry.Lower)},{"upper",WebNumber(entry.Upper)},{"gain",WebNumber(entry.GainLower)},{"gainUpper",WebNumber(entry.GainUpper)},{"gainPoint",WebNumber(entry.GainPoint)}}
-            }).ToArray():(object)new object[0];
+                cells=new[]{WebCell(Cell(item.Place)),WebCell(Cell(entry.HeroName)),WebCell(Cell(entry.AugmentName,"augments",bold:true,iconId:combination?null:entry.AugmentId)),GainCell(item.Stats),RateCell(item.Stats)},
+                stats=item.Stats};}).ToArray():(object)new object[0];
             state["icons"]=WebIcons();
             return Json.Write(state);
         }
 
-        // Hero pages open on the web overview (1.18.0); the classic view keeps its tab buttons and never shows it.
+        // Hero pages open on the web overview (2.0.0); the classic view keeps its tab buttons and never shows it.
         const string OverviewSection="概览";
-        object cachedOverview;List<Group> overviewGroups;int overviewRevision=-1;
+        object cachedOverview;List<Group> overviewGroups;int overviewRevision=-1;string overviewMode;
         bool EquipmentLoaded(){return groups.Any(g=>g.Path==RouteRecommendations.GroupPath||g.Path.StartsWith(EquipmentRecommendations.Prefix,StringComparison.Ordinal));}
         object WebOverview(){
             if(SelectedHero==null||SelectedHero.Id==0||section!=OverviewSection)return null;
-            if(cachedOverview!=null&&ReferenceEquals(overviewGroups,groups)&&overviewRevision==webImageRevision)return cachedOverview;
-            Func<string,int,object[]> top=(path,limit)=>{var g=groups.FirstOrDefault(x=>x.Path==path);return g==null?new object[0]:DataRows(g,false,false,false).Where(r=>r.Source.Rank>0).Take(limit).Select(r=>{
-                var entry=new Dictionary<string,object>{{"cells",r.Cells.Select(WebCell).ToArray()}};if(r.Stages!=null)entry["stages"]=r.Stages;var stats=WebStats(r.Source);if(stats!=null)entry["stats"]=stats;return (object)entry;}).ToArray();};
+            if(cachedOverview!=null&&ReferenceEquals(overviewGroups,groups)&&overviewRevision==webImageRevision&&overviewMode==StatisticsMode)return cachedOverview;
+            Func<string,object[]> all=path=>{var g=groups.FirstOrDefault(x=>x.Path==path);return g==null?new object[0]:ArrangeRows(DataRows(g,false,false,false),r=>StatsAt(r.Source),false).Where(x=>x.Place!="—").Select(x=>{var r=x.Item;
+                var entry=new Dictionary<string,object>{{"cells",new[]{WebCell(Cell(x.Place)),WebCell(r.Cells[1]),RateCell(x.Stats),GainCell(x.Stats)}},{"stats",x.Stats}};if(r.Stages!=null)entry["stages"]=r.Stages;return (object)entry;}).ToArray();};
             var plans=groups.FirstOrDefault(g=>g.Path==EquipmentRecommendations.Prefix+"plans");
-            cachedOverview=new {augments=top("champions/augments/all",8),combinations=top("champions/augmentCombinations",5),summoners=top("champions/summoners",3),skills=top("champions/skills",2),
-                plans=plans==null?new object[0]:EquipmentRows(plans,true,false).Take(4).Select(r=>(object)new {cells=r.Cells.Take(2).Select(WebCell).ToArray()}).ToArray(),plansPending=!EquipmentLoaded()};
-            overviewGroups=groups;overviewRevision=webImageRevision;return cachedOverview;
+            // Whole lists: each overview card scrolls in place.
+            cachedOverview=new {augments=all("champions/augments/all"),combinations=all("champions/augmentCombinations"),summoners=all("champions/summoners"),skills=all("champions/skills"),
+                plans=plans==null?new object[0]:EquipmentRows(plans,true,false).Select(r=>(object)new {cells=r.Cells.Take(2).Select(WebCell).ToArray()}).ToArray(),plansPending=!EquipmentLoaded()};
+            overviewGroups=groups;overviewRevision=webImageRevision;overviewMode=StatisticsMode;return cachedOverview;
         }
+        // The number-line gradient ends in the high end's own rate color (same scale as the shown values).
+        void SaveStatisticsMode(){StatisticsSettings.Save(advancedMode);cachedWebRows=null;cachedOverview=null;ScheduleWeb();}
+        static object RangeColor(double value){return double.IsNaN(value)?null:ColorTranslator.ToHtml(BadgePaint.RateColor(value));}
         static object WebNumber(double value){return double.IsNaN(value)||double.IsInfinity(value)?null:(object)value;}
-        // Observed values and display-only ranges for the number lines (1.18.0).
-        static Dictionary<string,object> WebStats(Row row){
-            if(row==null||row.Raw==null||double.IsNaN(row.Lower))return null;
-            var range=row.GainRange==null?Statistics.Interval.Empty:row.GainRange();
-            return new Dictionary<string,object>{{"win",WebNumber(row.Win)},{"count",WebNumber(row.Count)},{"pick",WebNumber(row.Pick)},{"lower",WebNumber(row.Lower)},{"upper",WebNumber(Statistics.WinUpper(row.Raw))},
-                {"gain",WebNumber(row.GainLower)},{"gainUpper",WebNumber(range.Upper)},{"gainPoint",WebNumber(range.Point)}};
+        // Main-window statistics mode (2.0.0): advanced shows the statistical values with number lines, simple shows observed values only.
+        // The levels are the fixed ones recommendations and overlays use, so every number matches the game (no user choice: the user decided
+        // a level picker that leaves in-game recommendations unchanged would disappoint).
+        bool advancedMode=true;
+        const double WinLevel=.99,GainLevel=.95;
+        string StatisticsMode{get{return advancedMode?"advanced":"simple";}}
+        Dictionary<string,object> StatsAt(Row row){
+            if(row==null||row.Raw==null)return null;
+            return StatsAt(row.Win,row.Count,row.Pick,Statistics.WinBounds(row.Raw,WinLevel),row.GainBounds(Statistics.GainAlpha(GainLevel)));
+        }
+        static Dictionary<string,object> StatsAt(double win,double count,double pick,Statistics.Interval rate,Statistics.Interval gain){
+            return new Dictionary<string,object>{{"win",WebNumber(win)},{"count",WebNumber(count)},{"pick",WebNumber(pick)},{"lower",WebNumber(rate.Lower)},{"upper",WebNumber(rate.Upper)},
+                {"gain",WebNumber(gain.Lower)},{"gainUpper",WebNumber(gain.Upper)},{"gainPoint",WebNumber(gain.Point)},{"upperColor",RangeColor(rate.Upper)},{"gainUpperColor",RangeColor(.5+gain.Upper)}};
+        }
+        static double Stat(Dictionary<string,object> stats,string key){object value;return stats!=null&&stats.TryGetValue(key,out value)&&value is double?(double)value:double.NaN;}
+        static double Ordered(double value){return double.IsNaN(value)?double.NegativeInfinity:value;}
+        // The hero's place on the win-rate board in the current mode; falls back to the loaded rank before the board is cached.
+        string HeroPlace(){
+            var board=data.CachedBoardGroups(Scope);var rows=board==null?null:board.Where(g=>g.Path=="champions/rows").Select(g=>g.Rows).FirstOrDefault();
+            if(rows==null||SelectedHero==null)return rankValue.Text.Trim();
+            var place=ArrangeRows(rows,r=>StatsAt(r.Win,r.Count,r.Pick,Statistics.WinBounds(r.Raw,WinLevel),Statistics.Interval.Empty),false).FirstOrDefault(x=>(int)Json.Num(Json.Get(x.Item.Raw,"id"),0)==SelectedHero.Id);
+            return place==null||place.Place=="—"?"#—":"#"+place.Place;
+        }
+        object RateCell(Dictionary<string,object> stats){double v=Stat(stats,"lower");return WebCell(Cell(Statistics.Pct(v),color:BadgePaint.RateColor(v)));}
+        object GainCell(Dictionary<string,object> stats){double v=Stat(stats,"gain");return WebCell(Cell(Statistics.GainText(v),color:BadgePaint.RateColor(double.IsNaN(v)?double.NaN:.5+v)));}
+        sealed class Placed<T>{internal T Item;internal Dictionary<string,object> Stats;internal string Place;}
+        // Advanced: statistical win rate (one decimal) -> gain -> games, or gain first on the gain boards. Simple: observed win rate (or observed gain) -> games.
+        List<Placed<T>> ArrangeRows<T>(IEnumerable<T> items,Func<T,Dictionary<string,object>> stats,bool gainFirst){
+            var list=items.Select(item=>new Placed<T>{Item=item,Stats=stats(item)}).ToList();
+            string key=advancedMode?(gainFirst?"gain":"lower"):(gainFirst?"gainPoint":"win");
+            var ordered=advancedMode&&!gainFirst?Statistics.OrderDisplayed(list,x=>Stat(x.Stats,"lower"),x=>Stat(x.Stats,"gain"),x=>Stat(x.Stats,"count")).ToList()
+                :list.OrderByDescending(x=>Ordered(Stat(x.Stats,key))).ThenByDescending(x=>Ordered(Stat(x.Stats,advancedMode?"lower":"count"))).ThenByDescending(x=>Ordered(Stat(x.Stats,"count"))).ToList();
+            int place=0;foreach(var x in ordered)x.Place=double.IsNaN(Stat(x.Stats,key))?"—":(++place).ToString();
+            return ordered;
         }
         readonly Dictionary<string,string> tooltipIconUris=new Dictionary<string,string>();
         HashSet<string> webIconAssets=new HashSet<string>();
@@ -166,11 +197,18 @@ namespace ConfidenceDesktop {
             var columns=grid.Columns.Cast<DataGridViewColumn>().Where(c=>c.Visible).ToArray();
             bool statistical=group!=null&&!group.Path.StartsWith(EquipmentRecommendations.Prefix,StringComparison.Ordinal)&&group.Path!=RouteRecommendations.GroupPath;
             var heroStats=home?null:groups.Where(g=>g.Path=="champions/champion/stats"&&g.Rows.Count==1).Select(g=>g.Rows[0]).FirstOrDefault();
-            if(cachedWebRows==null){webIconAssets.Clear();cachedOverview=null;cachedWebRows=(!home&&section==OverviewSection?Enumerable.Empty<DisplayRow>():displayedRows).Select(r=>{var entry=new Dictionary<string,object>{{"heroId",r.HeroId},{"icon",WebsiteData.ImageIcon(data,"champions",id:r.HeroId.ToString())},{"cells",columns.Select(c=>WebCell(r.Cells[c.Index])).ToArray()}};if(r.HeroId>0){entry["title"]=HeroNames.Title(r.Source.Name);entry["name"]=HeroNames.Name(r.Source.Name);}if(r.Stages!=null){entry["stages"]=r.Stages;entry["overall"]=r.Source!=null&&r.Source.UsesOverallAugment;}if(statistical){var stats=WebStats(r.Source);if(stats!=null)entry["stats"]=stats;}return entry;}).ToArray();}
+            double? heroRate=heroStats==null?(double?)null:Statistics.WinBounds(heroStats.Raw,WinLevel).Lower;
+            if(cachedWebRows==null){webIconAssets.Clear();cachedOverview=null;bool ranked=columns.Length>0&&columns[0].Index==0&&columns[0].HeaderText=="排名";
+                var shownRows=!home&&section==OverviewSection?new List<DisplayRow>():displayedRows;
+                var placed=statistical?ArrangeRows(shownRows,r=>StatsAt(r.Source),false):shownRows.Select(r=>new Placed<DisplayRow>{Item=r}).ToList();
+                cachedWebRows=placed.Select(x=>{var r=x.Item;var entry=new Dictionary<string,object>{{"heroId",r.HeroId},{"icon",WebsiteData.ImageIcon(data,"champions",id:r.HeroId.ToString())},
+                    {"cells",columns.Select(c=>!statistical?WebCell(r.Cells[c.Index]):c.Index==0&&ranked?WebCell(Cell(x.Place)):c.Index==2?RateCell(x.Stats):c.Index==3?GainCell(x.Stats):WebCell(r.Cells[c.Index])).ToArray()}};
+                    if(r.HeroId>0){entry["title"]=HeroNames.Title(r.Source.Name);entry["name"]=HeroNames.Name(r.Source.Name);}if(r.Stages!=null){entry["stages"]=r.Stages;entry["overall"]=r.Source!=null&&r.Source.UsesOverallAugment;}if(x.Stats!=null)entry["stats"]=x.Stats;return entry;}).ToArray();}
             return Json.Write(new {
                 type="state",board=webBoard,gainView=webGainView,heroIcon=home?null:WebsiteData.ImageIcon(data,"champions",id:SelectedHero.Id.ToString()),home=home,hero=home?"英雄总榜":ShortName(SelectedHero.Name),title=home?"":HeroNames.Title(SelectedHero.Name),name=home?"":HeroNames.Name(SelectedHero.Name),heroId=home?0:SelectedHero.Id,
                 section=section,group=group==null?"":group.Path,overview=WebOverview(),
-                rank=rankValue.Text.Trim(),rate=summaryRate.Text,heroWin=heroStats==null?null:WebNumber(heroStats.Win),heroCount=heroStats==null?null:WebNumber(heroStats.Count),rateColor=ColorTranslator.ToHtml(summaryRate.ForeColor),
+                rank=home?"":HeroPlace(),rate=heroRate==null?"":Statistics.Pct(heroRate.Value),heroWin=heroStats==null?null:WebNumber(heroStats.Win),heroCount=heroStats==null?null:WebNumber(heroStats.Count),rateColor=ColorTranslator.ToHtml(BadgePaint.RateColor(heroRate??double.NaN)),
+                advanced=advancedMode,
                 tabs=tabs.Controls.OfType<NavigationButton>().Select(b=>b.Text).ToArray(),
                 filters=filters.Controls.OfType<NavigationButton>().Select(b=>new {text=b.Text,path=(string)b.Tag,enabled=b.Enabled}).ToArray(),
                 flows=laterFlow.Items.Cast<object>().Select(Convert.ToString).ToArray(),flow=laterFlow.SelectedIndex,
@@ -226,6 +264,7 @@ namespace ConfidenceDesktop {
                     case "augmentSearch":augmentSearch.Text=value;break;
                     case "flow":if(int.TryParse(value,out number)&&number>=0&&number<laterFlow.Items.Count)laterFlow.SelectedIndex=number;break;
                     case "theme":SelectTheme(value);break;
+                    case "advanced":advancedMode=value=="1";SaveStatisticsMode();break;
                     case "skillMode":if(int.TryParse(value,out number)&&number>=0&&number<3)hudSkillMode.SelectedIndex=number;break;
                     case "closeMode":minimizeToTray=value=="1";CloseBehaviorSettings.Save(minimizeToTray);break;
                     case "autoImportShop":shopSession.SetAutoImport(value=="1");break;
