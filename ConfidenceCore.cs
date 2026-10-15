@@ -97,6 +97,40 @@ namespace ConfidenceDesktop {
             double upper=t1==N?1:1-BetaQuantile(.025,N-t1,t1+1);
             return lower-upper;
         }
+        // Display-only counterparts (1.18.0): the main window draws [lower, upper] with the observed value on a number line.
+        // Recommendation, filtering and ordering never read these.
+        public struct Interval{public double Upper,Point;public static readonly Interval Empty=new Interval{Upper=double.NaN,Point=double.NaN};}
+        // Wilson upper bound with the largest compatible win count; Calculate(row).Lower is the lower end.
+        public static double WinUpper(object row){
+            double n,low,high;if(!WinRange(row,out n,out low,out high))return double.NaN;
+            double p=high/n;if(p>=1)return 1;
+            double a=p+Z*Z/(2*n),b=Z*Math.Sqrt(p*(1-p)/n+Z*Z/(4*n*n));
+            return Math.Max(0,Math.Min(1,(a+b)/(1+Z*Z/n)));
+        }
+        // Mirror of ComparativeGain: most selected wins and fewest other wins, exact 97.5% one-sided bounds.
+        public static Interval ComparativeRange(object option,object population){
+            double n,a0,a1,N,t0,t1;
+            if(!WinRange(option,out n,out a0,out a1)||!WinRange(population,out N,out t0,out t1)||n>=N)return Interval.Empty;
+            double remaining=N-n,selected=Math.Min(a1,t1),other=Math.Max(t0,selected)-selected;
+            if(other>remaining||selected<Math.Max(a0,t0-remaining))return Interval.Empty;
+            double upper=selected==n?1:1-BetaQuantile(.025,n-selected,selected+1);
+            double lower=other==0?0:BetaQuantile(.025,other,remaining-other+1);
+            double rate=PointRate(option),whole=PointRate(population);
+            return new Interval{Upper=upper-lower,Point=rate-(whole*N-rate*n)/remaining};
+        }
+        // Mirror of AverageGain.
+        public static Interval AverageRange(object option,object hero){
+            double n,a0,a1,N,t0,t1;
+            if(!WinRange(option,out n,out a0,out a1)||!WinRange(hero,out N,out t0,out t1))return Interval.Empty;
+            double upper=a1==n?1:1-BetaQuantile(.025,n-a1,a1+1);
+            double lower=t0==0?0:BetaQuantile(.025,t0,N-t0+1);
+            return new Interval{Upper=upper-lower,Point=PointRate(option)-PointRate(hero)};
+        }
+        // Same population as CombinationGain (pair vs games with neither augment), without touching its fallback counter.
+        public static Interval CombinationRange(object combination,object hero,object a,object b){
+            object selected,population;double neither;
+            return TryCombinationPopulation(combination,hero,a,b,out selected,out population,out neither)?ComparativeRange(selected,population):ComparativeRange(combination,hero);
+        }
         static long combinationGainFallbackCount;
         public static long CombinationGainFallbackCount {get{return System.Threading.Interlocked.Read(ref combinationGainFallbackCount);}}
         static object CountedRow(double n,double wins){return new Dictionary<string,object>{{"sampleCount",n},{"winCount",wins},{"winRate",wins/n}};}
@@ -189,6 +223,8 @@ namespace ConfidenceDesktop {
         public double Win, Pick, Lower, Count;
         public double GainLower=double.NaN;
         public bool GainUsesSubset, UsesOverallAugment;
+        // Display-only gain range (1.18.0), evaluated lazily for rows the main window shows.
+        [ScriptIgnore] public Func<Statistics.Interval> GainRange;
         public Row OverallCopy(){var row=(Row)MemberwiseClone();row.UsesOverallAugment=true;return row;}
         public int Rank, OldRank;
         public Dictionary<string, object> Raw;
@@ -231,9 +267,13 @@ namespace ConfidenceDesktop {
         public readonly double Count,Lower,GainLower;
         public readonly string[] AugmentIds;
         public readonly double SecondaryGain;
-        internal AugmentGainEntry(int heroId,string title,string name,string heroIcon,string augmentId,string augmentName,string augmentIcon,string rarity,double count,double lower,double gain,string[] augmentIds=null,double secondaryGain=double.NaN){
+        // Display-only observed values and upper ends (1.18.0).
+        public readonly double Win,Pick,Upper,GainUpper,GainPoint;
+        internal AugmentGainEntry(int heroId,string title,string name,string heroIcon,string augmentId,string augmentName,string augmentIcon,string rarity,double count,double lower,double gain,string[] augmentIds=null,double secondaryGain=double.NaN,
+            double win=double.NaN,double pick=double.NaN,double upper=double.NaN,double gainUpper=double.NaN,double gainPoint=double.NaN){
             HeroId=heroId;HeroTitle=title;HeroName=name;HeroIcon=heroIcon;AugmentId=augmentId;AugmentName=augmentName;AugmentIcon=augmentIcon;Rarity=rarity;Count=count;Lower=lower;GainLower=gain;
             AugmentIds=augmentIds??new[]{augmentId};SecondaryGain=secondaryGain;
+            Win=win;Pick=pick;Upper=upper;GainUpper=gainUpper;GainPoint=gainPoint;
         }
     }
     public class DataStore {
@@ -271,16 +311,17 @@ namespace ConfidenceDesktop {
                 if(overall==null)continue;
                 var raw=combination?ReadHero(hero.Id,"high"):null;
                 foreach(var row in overall.Rows.Where(r=>r.GainLower>=(combination?CombinationGainBoardMinGain:AugmentGainBoardThreshold))){
+                    var range=row.GainRange==null?Statistics.Interval.Empty:row.GainRange();double upper=Statistics.WinUpper(row.Raw);
                     if(combination){
                         double secondary=CombinationShopBuilds.SecondaryGain(this,raw,row.Raw);if(!(secondary>=CombinationGainBoardMinSecondaryGain))continue;
                         var ids=CombinationShopBuilds.DisplayOrder(this,raw,Json.Arr(Json.Get(row.Raw,"augmentIds")).Select(Json.Str).ToArray());
                         entries.Add(new AugmentGainEntry(hero.Id,HeroNames.Title(hero.Name),HeroNames.Name(hero.Name),WebsiteData.ImageIcon(this,"champions",id:hero.Id.ToString()),
-                            string.Join("-",ids),row.Name,null,"",row.Count,row.Lower,row.GainLower,ids,secondary));continue;
+                            string.Join("-",ids),row.Name,null,"",row.Count,row.Lower,row.GainLower,ids,secondary,row.Win,row.Pick,upper,range.Upper,range.Point));continue;
                     }
                     string id=Json.Str(Json.Get(row.Raw,"id")??Json.Get(row.Raw,"augmentId"));object resource;
                     Resources["augments"].TryGetValue(id,out resource);
                     entries.Add(new AugmentGainEntry(hero.Id,HeroNames.Title(hero.Name),HeroNames.Name(hero.Name),WebsiteData.ImageIcon(this,"champions",id:hero.Id.ToString()),
-                        id,row.Name,WebsiteData.ImageIcon(this,"augments",id:id),Json.Str(Json.Get(resource,"rarity")),row.Count,row.Lower,row.GainLower));
+                        id,row.Name,WebsiteData.ImageIcon(this,"augments",id:id),Json.Str(Json.Get(resource,"rarity")),row.Count,row.Lower,row.GainLower,null,double.NaN,row.Win,row.Pick,upper,range.Upper,range.Point));
                 }
             }
             return new GainBoards(SortGainBoard(single),SortGainBoard(combinations));
@@ -416,15 +457,17 @@ namespace ConfidenceDesktop {
                     var singles=groups.FirstOrDefault(g=>g.Path=="champions/augments/all");
                     foreach(var group in groups.Where(g=>g.Path=="champions/augmentCombinations"||g.Path.StartsWith("champions/augmentCombinations/",StringComparison.Ordinal)))foreach(var option in group.Rows){
                         var ids=Json.Arr(Json.Get(option.Raw,"augmentIds")).Select(Json.Str).ToArray();if(ids.Length!=2)continue;
-                        option.GainLower=Statistics.CombinationGain(option.Raw,row.Raw,
-                            singles==null?null:singles.Rows.Where(r=>Json.Str(Json.Get(r.Raw,"id")??Json.Get(r.Raw,"augmentId"))==ids[0]).Select(r=>r.Raw).FirstOrDefault(),
-                            singles==null?null:singles.Rows.Where(r=>Json.Str(Json.Get(r.Raw,"id")??Json.Get(r.Raw,"augmentId"))==ids[1]).Select(r=>r.Raw).FirstOrDefault());
+                        object first=singles==null?null:singles.Rows.Where(r=>Json.Str(Json.Get(r.Raw,"id")??Json.Get(r.Raw,"augmentId"))==ids[0]).Select(r=>r.Raw).FirstOrDefault();
+                        object second=singles==null?null:singles.Rows.Where(r=>Json.Str(Json.Get(r.Raw,"id")??Json.Get(r.Raw,"augmentId"))==ids[1]).Select(r=>r.Raw).FirstOrDefault();
+                        option.GainLower=Statistics.CombinationGain(option.Raw,row.Raw,first,second);
+                        object pair=option.Raw,hero=row.Raw;option.GainRange=()=>Statistics.CombinationRange(pair,hero,first,second);
                     }
                 }
         }
         static void ApplyOptionStatistics(IEnumerable<Group> groups,Row baseline){
             if(baseline==null)return;
-            foreach(var group in groups){bool augment=group.Path=="champions/augments/all"||group.Path.StartsWith("champions/augments/stages/",StringComparison.Ordinal);foreach(var option in group.Rows){option.GainLower=augment?Statistics.ComparativeGain(option.Raw,baseline.Raw):Statistics.AverageGain(option.Raw,baseline.Raw);option.GainUsesSubset=false;}}
+            foreach(var group in groups){bool augment=group.Path=="champions/augments/all"||group.Path.StartsWith("champions/augments/stages/",StringComparison.Ordinal);foreach(var option in group.Rows){option.GainLower=augment?Statistics.ComparativeGain(option.Raw,baseline.Raw):Statistics.AverageGain(option.Raw,baseline.Raw);option.GainUsesSubset=false;
+                object raw=option.Raw,hero=baseline.Raw;option.GainRange=augment?(Func<Statistics.Interval>)(()=>Statistics.ComparativeRange(raw,hero)):()=>Statistics.AverageRange(raw,hero);}}
         }
         public static void SortDisplayedRates(Group group){
             if(group.Path.StartsWith(EquipmentRecommendations.Prefix+"later/")||group.Path=="champions/champion/stats"||!group.Rows.Any(r=>r.Rank>0))return;

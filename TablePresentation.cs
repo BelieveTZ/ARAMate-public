@@ -39,12 +39,12 @@ namespace ConfidenceDesktop {
             }
             grid.Rows.AddRange(classicRows.ToArray());
         }
-        IEnumerable<DisplayRow> DataRows(Group group,bool home,bool routes){
+        IEnumerable<DisplayRow> DataRows(Group group,bool home,bool routes,bool filtered=true){
             string kind=group.Path.Contains("augments")||group.Path.Contains("augmentCombinations")?"augments":group.Path.EndsWith("/summoners")?"summoner-spells":group.Path.EndsWith("/skills")?"skills:"+SelectedHero.Id:"items";
             bool single=group.Path=="champions/augments/all"||group.Path.StartsWith("champions/augments/stages/");
             var overall=single?(group.Path=="champions/augments/all"?group:groups.FirstOrDefault(g=>g.Path=="champions/augments/all")):null;
             var stages=overall==null?new Dictionary<string,int[]>():overall.Rows.ToDictionary(r=>Json.Str(Json.Get(r.Raw,"id")??Json.Get(r.Raw,"augmentId")),r=>Json.Arr(Json.Get(r.Raw,"availableStages")).Select(v=>(int)Json.Num(v)).Where(v=>v>=1&&v<=4).Distinct().OrderBy(v=>v).ToArray());
-            foreach(var row in group.Rows.Where(r=>MatchesRarity(group,r))){
+            foreach(var row in group.Rows.Where(r=>!filtered||MatchesRarity(group,r))){
                 string id=Json.Str(Json.Get(row.Raw,"id")??Json.Get(row.Raw,"augmentId"));
                 yield return new DisplayRow{Source=row,Stages=single?(stages.ContainsKey(id)?stages[id]:new int[0]):null,HeroId=home?data.Heroes.Where(h=>h.Id>0&&h.Name==row.Name).Select(h=>h.Id).FirstOrDefault():0,Cells=new[]{
                     Cell(routes?row.Name+"\n"+row.ShoeAdvice:row.Rank==0?"—":row.Rank.ToString()),

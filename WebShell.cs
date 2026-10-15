@@ -43,12 +43,35 @@ namespace ConfidenceDesktop {
                 heroId=entry.HeroId,title=entry.HeroTitle,name=entry.HeroName,icon=entry.HeroIcon,augmentId=entry.AugmentId,augmentIds=entry.AugmentIds,rarity=entry.Rarity,
                 cells=new[]{WebCell(Cell((index+1).ToString())),WebCell(Cell(entry.HeroName)),WebCell(Cell(entry.AugmentName,"augments",bold:true,iconId:combination?null:entry.AugmentId)),
                     WebCell(Cell(Statistics.GainText(entry.GainLower),color:BadgePaint.RateColor(.5+entry.GainLower))),
-                    WebCell(Cell(Statistics.Pct(entry.Lower),color:BadgePaint.RateColor(entry.Lower)))}
+                    WebCell(Cell(Statistics.Pct(entry.Lower),color:BadgePaint.RateColor(entry.Lower)))},
+                stats=new Dictionary<string,object>{{"win",WebNumber(entry.Win)},{"count",WebNumber(entry.Count)},{"pick",WebNumber(entry.Pick)},{"lower",WebNumber(entry.Lower)},{"upper",WebNumber(entry.Upper)},{"gain",WebNumber(entry.GainLower)},{"gainUpper",WebNumber(entry.GainUpper)},{"gainPoint",WebNumber(entry.GainPoint)}}
             }).ToArray():(object)new object[0];
             state["icons"]=WebIcons();
             return Json.Write(state);
         }
 
+        // Hero pages open on the web overview (1.18.0); the classic view keeps its tab buttons and never shows it.
+        const string OverviewSection="概览";
+        object cachedOverview;List<Group> overviewGroups;int overviewRevision=-1;
+        bool EquipmentLoaded(){return groups.Any(g=>g.Path==RouteRecommendations.GroupPath||g.Path.StartsWith(EquipmentRecommendations.Prefix,StringComparison.Ordinal));}
+        object WebOverview(){
+            if(SelectedHero==null||SelectedHero.Id==0||section!=OverviewSection)return null;
+            if(cachedOverview!=null&&ReferenceEquals(overviewGroups,groups)&&overviewRevision==webImageRevision)return cachedOverview;
+            Func<string,int,object[]> top=(path,limit)=>{var g=groups.FirstOrDefault(x=>x.Path==path);return g==null?new object[0]:DataRows(g,false,false,false).Where(r=>r.Source.Rank>0).Take(limit).Select(r=>{
+                var entry=new Dictionary<string,object>{{"cells",r.Cells.Select(WebCell).ToArray()}};if(r.Stages!=null)entry["stages"]=r.Stages;var stats=WebStats(r.Source);if(stats!=null)entry["stats"]=stats;return (object)entry;}).ToArray();};
+            var plans=groups.FirstOrDefault(g=>g.Path==EquipmentRecommendations.Prefix+"plans");
+            cachedOverview=new {augments=top("champions/augments/all",8),combinations=top("champions/augmentCombinations",5),summoners=top("champions/summoners",3),skills=top("champions/skills",2),
+                plans=plans==null?new object[0]:EquipmentRows(plans,true,false).Take(4).Select(r=>(object)new {cells=r.Cells.Take(2).Select(WebCell).ToArray()}).ToArray(),plansPending=!EquipmentLoaded()};
+            overviewGroups=groups;overviewRevision=webImageRevision;return cachedOverview;
+        }
+        static object WebNumber(double value){return double.IsNaN(value)||double.IsInfinity(value)?null:(object)value;}
+        // Observed values and display-only ranges for the number lines (1.18.0).
+        static Dictionary<string,object> WebStats(Row row){
+            if(row==null||row.Raw==null||double.IsNaN(row.Lower))return null;
+            var range=row.GainRange==null?Statistics.Interval.Empty:row.GainRange();
+            return new Dictionary<string,object>{{"win",WebNumber(row.Win)},{"count",WebNumber(row.Count)},{"pick",WebNumber(row.Pick)},{"lower",WebNumber(row.Lower)},{"upper",WebNumber(Statistics.WinUpper(row.Raw))},
+                {"gain",WebNumber(row.GainLower)},{"gainUpper",WebNumber(range.Upper)},{"gainPoint",WebNumber(range.Point)}};
+        }
         readonly Dictionary<string,string> tooltipIconUris=new Dictionary<string,string>();
         HashSet<string> webIconAssets=new HashSet<string>();
         readonly HashSet<string> sentImages=new HashSet<string>();
@@ -118,6 +141,7 @@ namespace ConfidenceDesktop {
         void RestoreClassic(string message) {
             if(IsDisposed)return;webReady=false;classicActive=true;
             if(web!=null){Controls.Remove(web);web.Dispose();web=null;}
+            if(section==OverviewSection){section="海克斯";if(SelectedHero!=null&&SelectedHero.Id!=0)BuildFilters();}
             ShowRows();classicLayout.Visible=true;classicLayout.BringToFront();
             if(!StartupTrace.ForceClassic)MessageBox.Show(this,message,"界面提示",MessageBoxButtons.OK,MessageBoxIcon.Information);
         }
@@ -140,11 +164,13 @@ namespace ConfidenceDesktop {
         string CoreWebState() {
             var group=categories.SelectedItem as Group;bool home=SelectedHero==null||SelectedHero.Id==0;
             var columns=grid.Columns.Cast<DataGridViewColumn>().Where(c=>c.Visible).ToArray();
-            if(cachedWebRows==null){webIconAssets.Clear();cachedWebRows=displayedRows.Select(r=>{var entry=new Dictionary<string,object>{{"heroId",r.HeroId},{"icon",WebsiteData.ImageIcon(data,"champions",id:r.HeroId.ToString())},{"cells",columns.Select(c=>WebCell(r.Cells[c.Index])).ToArray()}};if(r.HeroId>0){entry["title"]=HeroNames.Title(r.Source.Name);entry["name"]=HeroNames.Name(r.Source.Name);}if(r.Stages!=null){entry["stages"]=r.Stages;entry["overall"]=r.Source!=null&&r.Source.UsesOverallAugment;}return entry;}).ToArray();}
+            bool statistical=group!=null&&!group.Path.StartsWith(EquipmentRecommendations.Prefix,StringComparison.Ordinal)&&group.Path!=RouteRecommendations.GroupPath;
+            var heroStats=home?null:groups.Where(g=>g.Path=="champions/champion/stats"&&g.Rows.Count==1).Select(g=>g.Rows[0]).FirstOrDefault();
+            if(cachedWebRows==null){webIconAssets.Clear();cachedOverview=null;cachedWebRows=(!home&&section==OverviewSection?Enumerable.Empty<DisplayRow>():displayedRows).Select(r=>{var entry=new Dictionary<string,object>{{"heroId",r.HeroId},{"icon",WebsiteData.ImageIcon(data,"champions",id:r.HeroId.ToString())},{"cells",columns.Select(c=>WebCell(r.Cells[c.Index])).ToArray()}};if(r.HeroId>0){entry["title"]=HeroNames.Title(r.Source.Name);entry["name"]=HeroNames.Name(r.Source.Name);}if(r.Stages!=null){entry["stages"]=r.Stages;entry["overall"]=r.Source!=null&&r.Source.UsesOverallAugment;}if(statistical){var stats=WebStats(r.Source);if(stats!=null)entry["stats"]=stats;}return entry;}).ToArray();}
             return Json.Write(new {
                 type="state",board=webBoard,gainView=webGainView,heroIcon=home?null:WebsiteData.ImageIcon(data,"champions",id:SelectedHero.Id.ToString()),home=home,hero=home?"英雄总榜":ShortName(SelectedHero.Name),title=home?"":HeroNames.Title(SelectedHero.Name),name=home?"":HeroNames.Name(SelectedHero.Name),heroId=home?0:SelectedHero.Id,
-                section=section,group=group==null?"":group.Path,
-                rank=rankValue.Text.Trim(),rate=summaryRate.Text,rateColor=ColorTranslator.ToHtml(summaryRate.ForeColor),
+                section=section,group=group==null?"":group.Path,overview=WebOverview(),
+                rank=rankValue.Text.Trim(),rate=summaryRate.Text,heroWin=heroStats==null?null:WebNumber(heroStats.Win),heroCount=heroStats==null?null:WebNumber(heroStats.Count),rateColor=ColorTranslator.ToHtml(summaryRate.ForeColor),
                 tabs=tabs.Controls.OfType<NavigationButton>().Select(b=>b.Text).ToArray(),
                 filters=filters.Controls.OfType<NavigationButton>().Select(b=>new {text=b.Text,path=(string)b.Tag,enabled=b.Enabled}).ToArray(),
                 flows=laterFlow.Items.Cast<object>().Select(Convert.ToString).ToArray(),flow=laterFlow.SelectedIndex,
@@ -194,7 +220,7 @@ namespace ConfidenceDesktop {
                     case "gainView":webGainView=value=="combination"?"combination":"single";break;
                     case "hero":if(int.TryParse(value,out number)){var hero=data.Heroes.FirstOrDefault(h=>h.Id==number);if(hero!=null){if(number==0){webBoard="heroes";}heroes.SelectedItem=hero;}}break;
                     case "search":SendWeb(new {type="search",query=value,heroes=HeroAliases.Search(data.Heroes,value).Where(h=>h.Id>0).Take(12).Select(h=>new {id=h.Id,title=HeroNames.Title(h.Name),name=HeroNames.Name(h.Name),full=h.Name,icon=WebsiteData.ImageIcon(data,"champions",id:h.Id.ToString())}).ToArray()});break;
-                    case "section":if(tabs.Controls.OfType<NavigationButton>().Any(b=>b.Text==value)){section=value;if(section=="装备")LoadGroups(true);else BuildFilters();}break;
+                    case "section":if(value==OverviewSection||tabs.Controls.OfType<NavigationButton>().Any(b=>b.Text==value)){section=value;if(section=="装备")LoadGroups(true);else{BuildFilters();if(section==OverviewSection&&!EquipmentLoaded())LoadGroups(true);}}break;
                     case "group":if(filters.Controls.OfType<NavigationButton>().Any(b=>(string)b.Tag==value&&b.Enabled))SelectGroup(value);break;
                     case "rarity":if(int.TryParse(value,out number)&&number>=0&&number<4)rarity.SelectedIndex=number;break;
                     case "augmentSearch":augmentSearch.Text=value;break;
