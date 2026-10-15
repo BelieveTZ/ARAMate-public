@@ -60,8 +60,7 @@ namespace ConfidenceDesktop {
                     var row=rows[i];float x=bounds.X+i*column;
                     if(i>0)Line(g,x,y+35,x,y+97);
                     Text(g,"#"+row.Rank+"  "+row.Name,heading,i==0?Gold:DesktopTheme.Text,new RectangleF(x+5,y+31,column-10,23));
-                    Metric(g,"统计学胜率",Statistics.Pct(row.Lower),RateColor(row.Lower),new RectangleF(x+2,y+58,column/2-4,38));
-                    Metric(g,"胜率提升",Statistics.GainText(row.GainLower),RateColor(double.IsNaN(row.GainLower)?double.NaN:.5+row.GainLower),new RectangleF(x+column/2+2,y+58,column/2-4,38));
+                    Metric(g,"统计学胜率",Statistics.Pct(row.Lower),RateColor(row.Lower),new RectangleF(x+2,y+58,column-4,38));
                 }
             }
         }
@@ -253,8 +252,7 @@ namespace ConfidenceDesktop {
                         string sub=SkillContext(result.Context,row.Pick);float subWidth=g.MeasureString(sub,label).Width;if(subWidth<=column-12)Text(g,sub,label,DesktopTheme.Muted,new RectangleF(x+6,bounds.Y+29,column-12,17));else using(var small=new Font("Microsoft YaHei UI",Math.Max(8,11*(column-12)/subWidth),FontStyle.Regular,GraphicsUnit.Pixel))Text(g,sub,small,DesktopTheme.Muted,new RectangleF(x+6,bounds.Y+29,column-12,17));
                         Line(g,x+10,divider,x+column-10,divider);
                         float metricY=divider+Math.Max(2,(bounds.Bottom-divider-40)/2);
-                        Metric(g,"统计学胜率",Statistics.Pct(row.Lower),RateColor(row.Lower),new RectangleF(x+2,metricY,column/2-4,37));
-                        Metric(g,"胜率提升",Statistics.GainText(row.GainLower),RateColor(double.IsNaN(row.GainLower)?double.NaN:.5+row.GainLower),new RectangleF(x+column/2+2,metricY,column/2-4,37));
+                        Metric(g,"统计学胜率",Statistics.Pct(row.Lower),RateColor(row.Lower),new RectangleF(x+2,metricY,column-4,37));
                     }
                 }return;
             }

@@ -24,7 +24,7 @@ namespace ConfidenceDesktop {
                 double score=vertical/19.0+across/(double)(horizontal-5);if(score>best){best=score;found=new Rectangle(x,y,horizontal,height);}
             }return found;
         }
-        public static Rectangle Recommendation(Rectangle stats,int gameWidth,int columns=1,int gameHeight=0){int height=gameHeight>0?Math.Max(80,Math.Min(140,(int)Math.Round(gameHeight*.0868))):stats.Height;int gap=Math.Max(6,height/15),width=Math.Min(230,Math.Max(170,height*2));width=Math.Max(1,Math.Min(width*columns,stats.Left-gap));return new Rectangle(Math.Max(0,stats.Left-width-gap),stats.Bottom-height,width,height);}
+        public static Rectangle Recommendation(Rectangle stats,int gameWidth,int columns=1,int gameHeight=0){int height=gameHeight>0?Math.Max(80,Math.Min(140,(int)Math.Round(gameHeight*.0868))):stats.Height;int gap=Math.Max(6,height/15),width=Math.Min(170,Math.Max(140,(int)Math.Round(height*1.4)));width=Math.Max(1,Math.Min(width*columns,stats.Left-gap));return new Rectangle(Math.Max(0,stats.Left-width-gap),stats.Bottom-height,width,height);}
     }
     public sealed class HudAnchorStabilizer {
         Rectangle anchor;Size size;IntPtr window;

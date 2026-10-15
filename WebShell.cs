@@ -61,9 +61,12 @@ namespace ConfidenceDesktop {
             var plans=groups.FirstOrDefault(g=>g.Path==EquipmentRecommendations.Prefix+"plans");
             // Whole lists: each overview card scrolls in place.
             cachedOverview=new {augments=all("champions/augments/all"),combinations=all("champions/augmentCombinations"),summoners=all("champions/summoners"),skills=all("champions/skills"),
-                plans=plans==null?new object[0]:EquipmentRows(plans,true,false).Select(r=>(object)new {cells=r.Cells.Take(2).Select(WebCell).ToArray()}).ToArray(),plansPending=!EquipmentLoaded()};
+                plans=plans==null?new object[0]:EquipmentRows(plans,true,false).Select(r=>(object)new {cells=r.Cells.Take(2).Select(WebCell).Concat(new[]{BestLater(5,r.Source.Name),BestLater(6,r.Source.Name)}).ToArray()}).ToArray(),plansPending=!EquipmentLoaded()};
             overviewGroups=groups;overviewRevision=webImageRevision;overviewMode=StatisticsMode;return cachedOverview;
         }
+        // Overview core build card: the plan's best fifth / sixth item (first S-grade row of that plan); empty when the core already fixes the slot.
+        object BestLater(int slot,string plan){var group=groups.FirstOrDefault(g=>g.Path==EquipmentRecommendations.Prefix+"later/"+slot);var best=group==null?null:group.Rows.FirstOrDefault(r=>r.Name==plan&&r.ShoeAdvice=="S");
+            return WebCell(best==null?Cell(""):Cell(best.StarterName,"items",tooltip:best.StarterName));}
         // The number-line gradient ends in the high end's own rate color (same scale as the shown values).
         void SaveStatisticsMode(){StatisticsSettings.Save(advancedMode);cachedWebRows=null;cachedOverview=null;ScheduleWeb();}
         // Theme swatch background: halfway between the bottom layer (bg) and the table (panel). bg alone makes every theme look black; panel blends into the menu.

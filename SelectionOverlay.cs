@@ -188,7 +188,7 @@ namespace ConfidenceDesktop {
             var groups=data.AugmentGroups(hero,scope);var group=groups.FirstOrDefault(g=>g.Path=="champions/summoners");if(group==null)return null;
             var rows=NearBest(group.Rows);if(rows.Count==0)return null;
             var skills=groups.FirstOrDefault(g=>g.Path=="champions/skills");var skillRows=skills==null?new List<Row>():NearBest(skills.Rows);
-            int width=Math.Min(200*(rows.Count+skillRows.Count)+(skillRows.Count>0?8:0),area.Width-30),height=108;
+            int width=Math.Min(160*(rows.Count+skillRows.Count)+(skillRows.Count>0?8:0),area.Width-30),height=108;
             int y=area.Height;
             return new CardResult{Card=new Candidate{Name="召唤师技能"},Recommendations=rows,SkillRecommendations=skillRows,Bounds=new Rectangle((area.Width-width)/2,y,width,height),Context=("")};
         }

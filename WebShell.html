@@ -228,22 +228,23 @@ function fitTableContent(table,group){
 // Paint the scrollbar slot on the scrollport background; native scrollbars remain above it.
 function paintTableEdges(root,table,thead){
  if(!table.querySelectorAll||!root.getBoundingClientRect)return ()=>{};
- let hovered=null,frame=0;
- const paint=()=>{frame=0;const rows=table.querySelectorAll('tbody tr');if(!rows.length||!root.contains(table))return;const box=root.getBoundingClientRect(),head=thead.getBoundingClientRect().height,first=rows[0].getBoundingClientRect(),last=rows[rows.length-1].getBoundingClientRect(),step=first.height,start=first.top-box.top-.5;
+ let hovered=null,scrolling=false,timer=0;
+ const paint=()=>{const rows=table.querySelectorAll('tbody tr');if(!rows.length||!root.contains(table))return;const box=root.getBoundingClientRect(),head=thead.getBoundingClientRect().height,first=rows[0].getBoundingClientRect(),last=rows[rows.length-1].getBoundingClientRect(),step=first.height,start=first.top-box.top-.5;
   const css=getComputedStyle(document.documentElement),C=n=>css.getPropertyValue(n).trim(),hd=C("--header"),sp=C("--separator"),hv=C("--hover");
   const layers=[`linear-gradient(to bottom,${hd} ${head-.5}px,${sp} ${head-.5}px,${sp} ${head+.5}px,transparent ${head+.5}px)`],sizes=['100% 100%'],positions=['0 0'];
-  layers.push(`repeating-linear-gradient(to bottom,${sp} 0,${sp} 1px,transparent 1px,transparent ${step}px)`);sizes.push(`100% ${last.bottom-first.top+1}px`);positions.push(`0 ${start}px`);
-  if(hovered){const r=hovered.getBoundingClientRect();layers.push(`linear-gradient(${hv},${hv})`);sizes.push(`100% ${r.height}px`);positions.push(`0 ${r.top-box.top}px`);}
-  root.style.backgroundImage=layers.join(',');root.style.backgroundSize=sizes.join(',');root.style.backgroundPosition=positions.join(',');root.style.backgroundRepeat='no-repeat';
+  if(!scrolling){layers.push(`repeating-linear-gradient(to bottom,${sp} 0,${sp} 1px,transparent 1px,transparent ${step}px)`);sizes.push(`100% ${last.bottom-first.top+1}px`);positions.push(`0 ${start}px`);
+   if(hovered){const r=hovered.getBoundingClientRect();layers.push(`linear-gradient(${hv},${hv})`);sizes.push(`100% ${r.height}px`);positions.push(`0 ${r.top-box.top}px`);}}
+  root.style.backgroundAttachment='scroll';root.style.backgroundImage=layers.join(',');root.style.backgroundSize=sizes.join(',');root.style.backgroundPosition=positions.join(',');root.style.backgroundRepeat='no-repeat';
  };
- const schedule=()=>{if(!frame)frame=requestAnimationFrame(paint);};
- root.onscroll=schedule;root.onpointerover=e=>{const row=e.target.closest('tbody tr');if(row!==hovered){hovered=row;schedule();}};root.onpointerleave=()=>{hovered=null;schedule();};
+ const finish=()=>{if(!scrolling)return;scrolling=false;clearTimeout(timer);timer=0;paint();};
+ root.onscroll=()=>{scrolling=true;clearTimeout(timer);paint();timer=setTimeout(finish,120);};root.onscrollend=finish;
+ root.onpointerover=e=>{const row=e.target.closest('tbody tr');if(row!==hovered){hovered=row;paint();}};root.onpointerleave=()=>{hovered=null;paint();};
  if(root.id==='table')window.paintEdgesNow=paint;paint();return paint;
 }
 let headerObserver,tableObserver;
 function renderTable(s){if(headerObserver)headerObserver.disconnect();if(tableObserver)tableObserver.disconnect();$('tooltip').hidden=true;hideTooltip();[headerObserver,tableObserver]=buildTable($('table'),s,mainSort);}
 // Builds one statistics or equipment table into a scrolling .tablewrap; the overview cards use it too. Returns its resize observers.
-function buildTable(root,s,sorting){root.replaceChildren();root.style.backgroundImage='';root.style.backgroundSize='';root.style.backgroundPosition='';root.onscroll=root.onpointerover=root.onpointerleave=null;
+function buildTable(root,s,sorting){root.replaceChildren();root.style.backgroundImage='';root.style.backgroundSize='';root.style.backgroundPosition='';root.style.backgroundAttachment='';root.onscroll=root.onscrollend=root.onpointerover=root.onpointerleave=null;
  const statistical=s.rows.some(r=>r.stats),advanced=s.advanced!==false;
  if(!s.rows.length){root.append(el('div',s.empty||'暂无数据','empty'));return [];}
  const gain=/^(augment|combination)-gain-board$/.test(s.group),table=el('table'),cols=el('colgroup'),thead=el('thead'),hr=el('tr'),tbody=el('tbody');
@@ -251,7 +252,8 @@ function buildTable(root,s,sorting){root.replaceChildren();root.style.background
  const defaultKey=advanced?(gain?'gain':'lower'):(gain?'gainPoint':'win'),sortGroup=String(s.heroId||0)+':'+s.group+'|'+(advanced?'advanced':'simple');if(sorting.state.group!==sortGroup)sorting.state={group:sortGroup,key:defaultKey,dir:-1};
  // Which state columns are statistics drawn on number lines, with their shared scale and reference line.
  const statisticColumn=c=>statistical&&c.index>=2&&!(gain&&c.index===2)&&!!metricKind(c.text);
- const metrics=s.columns.map(c=>advanced&&statisticColumn(c)?metricKind(c.text):null),shown=s.columns.map(c=>advanced||!statisticColumn(c));
+ const hideGain=/^champions\/(summoners|skills)$/.test(s.group);
+ const metrics=s.columns.map(c=>advanced&&statisticColumn(c)?metricKind(c.text):null),shown=s.columns.map(c=>(advanced||!statisticColumn(c))&&!(hideGain&&metricKind(c.text)==='gain'));
  const scale=metrics.map(kind=>kind?{kind,ref:kind==='gain'?0:s.home?.5:gain?null:s.heroWin}:null);
  const observed=statistical?[...(!advanced&&gain?[['gainPoint','实际提升']]:[]),['win','实际胜率'],['count','场次'],['pick','选取率']].filter(([key])=>s.rows.some(r=>num(r.stats?.[key]))):[];
  const header=(text,cls,key)=>{const th=el('th',null,cls);th.append(el('span',text,'th-label'));if(key){th.classList.add('sortable');th.dataset.sort=key;th.title='点击排序';th.onclick=()=>{sorting.state={group:sortGroup,key,dir:sorting.state.key===key?-sorting.state.dir:-1};applySort();};}return th;};
@@ -271,7 +273,7 @@ function buildTable(root,s,sorting){root.replaceChildren();root.style.background
    else if(s.home&&index===1){td.classList.add('hero-cell');if(statistical)td.classList.add('name-column');const b=heroLabel(el('button',null,'herolink'),r.title||'',r.name||c.text,r.icon);b.onclick=()=>openHero(r.heroId);td.append(b);}
    else if(gain&&index===2){td.classList.add('gain-augment');if(statistical)td.classList.add('name-column');const entry=el('div',null,'augment-entry');renderCellParts(entry,c.parts);td.append(entry);}
    else if(!s.home&&index===1&&/^champions\/augments\/(all|stages\/[1-4])$/.test(s.group)){renderAugmentName(td,c,Array.isArray(r.stages)?r.stages:[],Number(s.group.match(/stages\/([1-4])$/)?.[1]||0),r.overall===true);if(statistical)td.classList.add('name-column');}
-   else{td.classList.add('sequence');if(statistical&&index===1)td.classList.add('name-column');renderCellParts(td,c.parts,index===1&&(/\/starters$/.test(s.group)||s.group==='champions/equipment/plans'||s.group==='champions/equipment/synergy'));}
+   else{td.classList.add('sequence');if(statistical&&index===1)td.classList.add('name-column');renderCellParts(td,c.parts,index===1&&(/\/starters$/.test(s.group)||s.group==='champions/equipment/plans'||s.group==='champions/equipment/synergy')||index>=2&&s.group==='champions/equipment/plans');}
    if(!kind&&r.overall===true&&/^champions\/augments\/stages\/[1-4]$/.test(s.group)&&(index===2||index===3)){td.append(el('span','（总体）','overall-label'));td.dataset.tip='本选样本不足 50 场，显示总体数据';td.tabIndex=0;}
    tr.append(td);});
   observed.forEach(([key],k)=>{const v=r.stats?.[key],td=el('td',null,'observed'+(!advanced&&k===0?' lead':''));td.append(el('span',key==='count'?games(v):key==='gainPoint'?signed(v):pct(v),'observed-value'));tr.append(td);});
@@ -291,14 +293,14 @@ function buildTable(root,s,sorting){root.replaceChildren();root.style.background
 // Give every row's number-line block the widest row's width so the lines stay aligned while each block is centered; observed numbers are simply centered.
 function equalizeColumns(table){if(typeof table.querySelectorAll!=='function')return;const groups=new Map();table.querySelectorAll('tbody tr').forEach(tr=>[...tr.children].forEach((td,i)=>{const block=td.querySelector?.(':scope>.metric,:scope>.name-block');if(block){if(!groups.has(i))groups.set(i,[]);groups.get(i).push(block);}}));groups.forEach(blocks=>{blocks.forEach(b=>b.style.width='');const width=Math.ceil(Math.max(...blocks.map(b=>b.getBoundingClientRect().width)));blocks.forEach(b=>b.style.width=width+'px');});}
 // One column in the order of a game: summoner spells, skill order, augments, combinations, then the core build.
-// Each card is the same table as its full section (number lines included), fixed in height and scrollable in place.
+// Each card uses its full section table; summoners, skills and combinations show all rows without an inner scroll.
 let overviewObservers=[];
 function renderOverview(s){const o=s.overview||{},root=$('overview');hideTooltip();overviewObservers.forEach(x=>x.disconnect());overviewObservers=[];root.replaceChildren();
  const cols=names=>names.map((text,index)=>({text,index})),stat=name=>['排名',name,'统计学胜率','统计学胜率提升'];
  // Links only where the section shows more than its card: augments add stage filters, the core build adds the fifth and sixth items. Combinations are few, so their card shows them all.
- const cards=[['召唤师技能','','champions/summoners',stat('组合'),o.summoners],['技能加点','','champions/skills',stat('加点顺序'),o.skills],
-  ['海克斯','海克斯','champions/augments/all',stat('海克斯'),o.augments,null,'全部 ›'],['海克斯组合','','champions/augmentCombinations',stat('组合'),o.combinations,null,'',true],
-  ['核心出装','装备','champions/equipment/plans',['适用方案','建议购买顺序'],o.plansPending?[]:o.plans,o.plansPending?'正在计算核心出装…':'暂无核心出装','详细 ›']].map(([title,section,group,names,rows,empty,link,whole])=>{
+ const cards=[['召唤师技能','','champions/summoners',stat('组合'),o.summoners,null,'',true],['技能加点','','champions/skills',stat('加点顺序'),o.skills,null,'',true],
+  ['海克斯','海克斯','champions/augments/all',stat('海克斯'),o.augments,null,'详细 ›'],['海克斯组合','','champions/augmentCombinations',stat('组合'),o.combinations,null,'',true],
+  ['核心出装','装备','champions/equipment/plans',['适用方案','核心出装顺序','第五件','第六件'],o.plansPending?[]:o.plans,o.plansPending?'正在计算核心出装…':'暂无核心出装','详细 ›']].map(([title,section,group,names,rows,empty,link,whole])=>{
   const c=el('section',null,'card'),h=el('h3',title),body=el('div',null,'tablewrap ov-table'+(whole?' whole':''));if(link){const more=el('button',link,'more');more.onclick=()=>send('section',section);h.append(more);}c.dataset.group=group;c.append(h,body);root.append(c);
   return {body,state:{...s,home:false,group,columns:cols(names),rows:(rows||[]).map(r=>({heroId:s.heroId,...r})),empty:empty||'暂无数据'}};});
  cards.forEach(x=>overviewObservers.push(...buildTable(x.body,x.state,{state:{group:'',key:'',dir:0}})));
@@ -314,9 +316,10 @@ function alignOverview(root){if(typeof root.querySelectorAll!=='function')return
  for(let level=0;level<=COMPACT.length;level++){tables.forEach(table=>setCompact(table,level));if(tables.every(fits))break;}
  const blocks=new Map();tables.forEach(table=>table.querySelectorAll('tbody tr').forEach(tr=>[...tr.children].forEach((td,i)=>{const b=td.querySelector?.(':scope>.metric');if(b){if(!blocks.has(i))blocks.set(i,[]);blocks.get(i).push(b);}})));
  blocks.forEach(list=>{list.forEach(b=>b.style.width='');const width=Math.ceil(Math.max(...list.map(b=>b.getBoundingClientRect().width)));list.forEach(b=>b.style.width=width+'px');});
- const heads=tables.map(table=>[...table.querySelector('thead tr').children]);if(heads.some(h=>h.length!==heads[0].length))return;
+ const layouts=new Map();tables.forEach(table=>{const key=[...table.querySelectorAll('thead th')].map(th=>th.dataset.sort||th.className).join('|');if(!layouts.has(key))layouts.set(key,[]);layouts.get(key).push(table);});
+ layouts.forEach(tables=>{const heads=tables.map(table=>[...table.querySelector('thead tr').children]);
  const widths=heads[0].map((th,i)=>th.classList.contains('name-column')?null:Math.ceil(Math.max(...heads.map(h=>h[i].getBoundingClientRect().width))));
- tables.forEach(table=>{table.querySelectorAll('col').forEach((col,i)=>col.style.width=widths[i]===null?'':widths[i]+'px');table.classList.add('aligned');});}
+ tables.forEach(table=>{table.querySelectorAll('col').forEach((col,i)=>col.style.width=widths[i]===null?'':widths[i]+'px');table.classList.add('aligned');});});}
 const semanticColors={physicalDamage:'#ff8c34',attackDamage:'#ff8c34',magicDamage:'#6fa8ff',abilityPower:'#6fa8ff',trueDamage:'#ffffff',heal:'#5fd35f',health:'#5fd35f',lifeSteal:'#5fd35f',omnivamp:'#5fd35f',shield:'#8fd8e8',armor:'#f2c46d',magicResist:'#b88cff',movementSpeed:'#f3e9a4',attackSpeed:'#f7d44a',criticalStrike:'#ff6a4d',abilityHaste:'#e8e0c8',mana:'#3fb6ff',gold:'#ffd23f',armorPenetration:'#ff8c34',magicPenetration:'#6fa8ff',onHit:'#f0a060',passive:'#f0c75e',active:'#f0c75e',keywordMajor:'#f0c75e',spellName:'#f0c75e',spellPassive:'#f0c75e',unique:'#f0c75e',keyword:'#e9d7a6',status:'#e9d7a6',recast:'#e9d7a6',flavorText:'#9fb3b8',rarityPrismatic:'#e87cff',rarityLegendary:'#f0a030',ornnBonus:'#f0c75e'};
 const semanticBold=new Set(['trueDamage','passive','active','keywordMajor','spellName','spellPassive','unique','stat','totalValue','level']);
 function richText(node,text){String(text||'').split('\n').forEach((line,i)=>{if(i)node.append(el('br'));node.append(el('span',line));});}
