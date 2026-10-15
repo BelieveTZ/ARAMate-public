@@ -52,12 +52,19 @@ namespace ConfidenceDesktop {
         static ThemePalette CreateNoxus(){var p=Create("noxus","诺克萨斯",new[]{"#000000","#161616","#101010","#333333","#eeeeee","#a3a3a3","#e82623","#2a2a2a","#1f1f1f"});foreach(string key in p.colors.Keys.ToArray()){
                 if(new[]{"gold","accent-hover","accent-text","selected","selected-text"}.Contains(key))continue;
                 var color=p.colors[key];int gray=(color.R+color.G+color.B)/3;p.colors[key]=Color.FromArgb(gray,gray,gray);
-            }p.colors["accent-text"]=Hex("#080304");p.colors["selected-text"]=p.colors["accent-text"];return p;}
+            }
+            // Share Shadow's background surfaces after neutralization, keeping Noxus interactions and text.
+            string[] bases={"bg","panel","field","line","text","muted","gold","active","hover"};
+            foreach(string key in p.colors.Keys.ToArray()){
+                string anchor=bases.Contains(key)?key:Anchor(key);
+                if(new[]{"bg","panel","field"}.Contains(anchor)&&key!="accent-text"&&key!="selected-text")p.colors[key]=Shadow[key];
+            }
+            p.colors["accent-text"]=Hex("#080304");p.colors["selected-text"]=p.colors["accent-text"];return p;}
         public static readonly ThemePalette Demacia=CreateDemacia();
         // Demacia main-window navy, preserving the original relative palette offsets.
         static ThemePalette CreateDemacia(){Color basis=Hex("#0b1533");Func<int,int,int,string> blue=(r,g,b)=>ColorTranslator.ToHtml(Color.FromArgb(Clamp(basis.R+r),Clamp(basis.G+g),Clamp(basis.B+b)));var p=Create("demacia","德玛西亚",new[]{blue(-13,-17,-25),blue(0,0,0),blue(-8,-10,-14),blue(39,43,51),"#ffffff","#c3cbdc","#ffffff",blue(14,16,23),blue(8,9,13)});p.colors["outline"]=Hex("#060a0e");p.colors["desktop-text"]=Color.White;p.colors["desktop-muted"]=Hex("#c3cbdc");p.colors["accent-text"]=basis;p.colors["selected-text"]=basis;return p;}
 
-        public static readonly ThemePalette[] All={Piltover,Void,Shadow,Noxus,Demacia};
+        public static readonly ThemePalette[] All={Piltover,Shadow,Noxus};
         public static ThemePalette Find(string id){return All.FirstOrDefault(p=>p.Id==id)??Piltover;}
     }
     public static class ThemeManager {
