@@ -8,14 +8,14 @@ using System.Linq;
 namespace ConfidenceDesktop {
     public static class BadgePaint {
         public static readonly Color TransparentColor=Color.Black;
-        public static Color Gold {get{return DesktopTheme.Accent;}}
+        public static Color Gold {get{return ThemeManager.Current.Overlay["gold"];}}
         public static readonly Color Jade=Color.FromArgb(0,182,159);
 
         public static string SkillPickText(double pick){
             return "选取 "+(double.IsNaN(pick)?"暂无数据":pick<.01?"<1%":Math.Round(pick*100,0,MidpointRounding.AwayFromZero).ToString("0")+"%");
         }
         public static Color RateColor(double value){
-            if(double.IsNaN(value))return DesktopTheme.Muted;
+            if(double.IsNaN(value))return ThemeManager.Current.Overlay["desktop-muted"];
             var red=Color.FromArgb(230,92,100);var yellow=ThemePalette.Piltover["gold"];var green=Jade;
             double t=Math.Max(0,Math.Min(1,(value-.45)/.10));var from=t<=.5?red:yellow;var to=t<=.5?yellow:green;
             double weight=t<=.5?t*2:(t-.5)*2;
@@ -26,24 +26,24 @@ namespace ConfidenceDesktop {
             using(var format=new StringFormat{Alignment=align,LineAlignment=StringAlignment.Center,Trimming=StringTrimming.EllipsisCharacter,FormatFlags=StringFormatFlags.NoWrap})
             using(var brush=new SolidBrush(color))g.DrawString(value??"",font,brush,area,format);
         }
-        static void Line(Graphics g,float x1,float y1,float x2,float y2){using(var pen=new Pen(DesktopTheme.Line))g.DrawLine(pen,x1,y1,x2,y2);}
+        static void Line(Graphics g,float x1,float y1,float x2,float y2){using(var pen=new Pen(ThemeManager.Current.Overlay["line"]))g.DrawLine(pen,x1,y1,x2,y2);}
         static void Panel(Graphics g,Rectangle bounds,int headerHeight=0){
             var outer=new Rectangle(bounds.X,bounds.Y,Math.Max(1,bounds.Width-1),Math.Max(1,bounds.Height-1));
             using(var path=DesktopTheme.Rounded(outer,0)){
-                using(var brush=new SolidBrush(DesktopTheme.Surface))g.FillPath(brush,path);
-                if(headerHeight>0){var state=g.Save();g.SetClip(path);using(var brush=new SolidBrush(DesktopTheme.Raised))g.FillRectangle(brush,bounds.X,bounds.Y,bounds.Width,headerHeight);g.Restore(state);}
-                using(var pen=new Pen(DesktopTheme.Line))g.DrawPath(pen,path);
+                using(var brush=new SolidBrush(ThemeManager.Current.Overlay["panel"]))g.FillPath(brush,path);
+                if(headerHeight>0){var state=g.Save();g.SetClip(path);using(var brush=new SolidBrush(ThemeManager.Current.Overlay["header"]))g.FillRectangle(brush,bounds.X,bounds.Y,bounds.Width,headerHeight);g.Restore(state);}
+                using(var pen=new Pen(ThemeManager.Current.Overlay["line"]))g.DrawPath(pen,path);
             }
             if(headerHeight>0)Line(g,bounds.Left+1,bounds.Top+headerHeight,bounds.Right-2,bounds.Top+headerHeight);
         }
         static void Frame(Graphics g,Rectangle bounds){
             using(var path=DesktopTheme.Rounded(new Rectangle(bounds.X,bounds.Y,Math.Max(1,bounds.Width-1),Math.Max(1,bounds.Height-1)),0))
-            using(var pen=new Pen(DesktopTheme.Line))g.DrawPath(pen,path);
+            using(var pen=new Pen(ThemeManager.Current.Overlay["line"]))g.DrawPath(pen,path);
         }
         static void Metric(Graphics g,string label,string value,Color color,RectangleF area){
             using(var small=new Font("Microsoft YaHei UI",11,FontStyle.Regular,GraphicsUnit.Pixel))
             using(var number=new Font("Microsoft YaHei UI",16,FontStyle.Bold,GraphicsUnit.Pixel)){
-                Text(g,label,small,DesktopTheme.Muted,new RectangleF(area.X,area.Y,area.Width,15));
+                Text(g,label,small,ThemeManager.Current.Overlay["desktop-muted"],new RectangleF(area.X,area.Y,area.Width,15));
                 Text(g,value,number,color,new RectangleF(area.X,area.Y+15,area.Width,Math.Max(18,area.Height-15)));
             }
         }
@@ -54,12 +54,12 @@ namespace ConfidenceDesktop {
             float y=bounds.Top,column=bounds.Width/(float)rows.Count;
             using(var label=new Font("Microsoft YaHei UI",11,FontStyle.Regular,GraphicsUnit.Pixel))
             using(var heading=new Font("Microsoft YaHei UI",15,FontStyle.Bold,GraphicsUnit.Pixel)){
-                Text(g,ContextTitle(title,context),label,DesktopTheme.Muted,new RectangleF(bounds.X+12,y+5,bounds.Width-24,20));
+                Text(g,ContextTitle(title,context),label,ThemeManager.Current.Overlay["desktop-muted"],new RectangleF(bounds.X+12,y+5,bounds.Width-24,20));
                 Line(g,bounds.X+12,y+27,bounds.Right-12,y+27);
                 for(int i=0;i<rows.Count;i++){
                     var row=rows[i];float x=bounds.X+i*column;
                     if(i>0)Line(g,x,y+35,x,y+97);
-                    Text(g,"#"+row.Rank+"  "+row.Name,heading,i==0?Gold:DesktopTheme.Text,new RectangleF(x+5,y+31,column-10,23));
+                    Text(g,"#"+row.Rank+"  "+row.Name,heading,i==0?Gold:ThemeManager.Current.Overlay["desktop-text"],new RectangleF(x+5,y+31,column-10,23));
                     Metric(g,"统计学胜率",Statistics.Pct(row.Lower),RateColor(row.Lower),new RectangleF(x+2,y+58,column-4,38));
                 }
             }
@@ -91,13 +91,13 @@ namespace ConfidenceDesktop {
             using(var format=new StringFormat(StringFormat.GenericTypographic)){format.Alignment=align;format.LineAlignment=StringAlignment.Center;format.FormatFlags|=StringFormatFlags.NoWrap;
                 using(var path=new GraphicsPath()){
                     path.AddString(text??"",font.FontFamily,(int)font.Style,font.Size,area,format);
-                    using(var outline=new Pen(Color.FromArgb(235,ThemeManager.Current["outline"]),Math.Max(1,font.Size/13f)){LineJoin=LineJoin.Round}){outline.LineJoin=LineJoin.Round;g.DrawPath(outline,path);}
+                    using(var outline=new Pen(Color.FromArgb(235,ThemeManager.Current.Overlay["outline"]),Math.Max(1,font.Size/13f)){LineJoin=LineJoin.Round}){outline.LineJoin=LineJoin.Round;g.DrawPath(outline,path);}
                     using(var brush=new SolidBrush(color))g.FillPath(brush,path);
                 }
             }
         }
         static void ArcOutlinedText(Graphics g,string text,Font font,Color color,RectangleF area,CardResult card,Rectangle bounds){
-            using(var path=new GraphicsPath())using(var format=new StringFormat(StringFormat.GenericTypographic))using(var outline=new Pen(Color.FromArgb(235,ThemeManager.Current["outline"]),Math.Max(1,font.Size/13f)){LineJoin=LineJoin.Round}){
+            using(var path=new GraphicsPath())using(var format=new StringFormat(StringFormat.GenericTypographic))using(var outline=new Pen(Color.FromArgb(235,ThemeManager.Current.Overlay["outline"]),Math.Max(1,font.Size/13f)){LineJoin=LineJoin.Round}){
                 format.Alignment=StringAlignment.Center;format.LineAlignment=StringAlignment.Center;format.FormatFlags|=StringFormatFlags.NoWrap;path.AddString(text,font.FontFamily,(int)font.Style,font.Size,area,format);
                 var ink=path.GetBounds();ink.Inflate(outline.Width/2,outline.Width/2);double globalY=(ink.Top+ink.Bottom)/2+card.Bounds.Y-bounds.Y;
                 float target=(float)(SelectionMatcher.PosterEdgeX(card,globalY)-card.ArcDepth*8/58)+bounds.X-card.Bounds.X;
@@ -110,8 +110,8 @@ namespace ConfidenceDesktop {
                 float textWidth=card.ArcDepth-4,cy=bounds.Y+bounds.Height/2f,size=Math.Min(13,card.Bounds.Height/4f);
                 using(var format=new StringFormat{Alignment=StringAlignment.Center,LineAlignment=StringAlignment.Center,FormatFlags=StringFormatFlags.NoWrap})while(size>8){using(var font=new Font("Microsoft YaHei UI",size,FontStyle.Bold,GraphicsUnit.Pixel))if(new[]{"#888","100.0%",card.Row==null?"暂无":"#"+card.Row.Rank,card.Row==null?"数据":Statistics.Pct(card.Row.Lower)}.All(text=>g.MeasureString(text,font,int.MaxValue,format).Width<=textWidth))break;size=Math.Max(8,size-.5f);}
                 using(var font=new Font("Microsoft YaHei UI",size,FontStyle.Bold,GraphicsUnit.Pixel)){
-                    ArcOutlinedText(g,card.Row==null?"暂无":"#"+card.Row.Rank,font,card.Row==null?DesktopTheme.Muted:Gold,new RectangleF(center-textWidth/2,cy-24,textWidth,24),card,bounds);
-                    ArcOutlinedText(g,card.Row==null?"数据":Statistics.Pct(card.Row.Lower),font,card.Row==null?DesktopTheme.Muted:RateColor(card.Row.Lower),new RectangleF(center-textWidth/2,cy,textWidth,24),card,bounds);
+                    ArcOutlinedText(g,card.Row==null?"暂无":"#"+card.Row.Rank,font,card.Row==null?ThemeManager.Current.Overlay["desktop-muted"]:Gold,new RectangleF(center-textWidth/2,cy-24,textWidth,24),card,bounds);
+                    ArcOutlinedText(g,card.Row==null?"数据":Statistics.Pct(card.Row.Lower),font,card.Row==null?ThemeManager.Current.Overlay["desktop-muted"]:RateColor(card.Row.Lower),new RectangleF(center-textWidth/2,cy,textWidth,24),card,bounds);
                 }g.Restore(saved);
             }
         }
@@ -122,7 +122,7 @@ namespace ConfidenceDesktop {
             }
         }
         static void BenchOutlinedText(Graphics g,string text,Font font,Color color,RectangleF area,StringAlignment align){
-            using(var path=new GraphicsPath())using(var format=new StringFormat(StringFormat.GenericTypographic))using(var outline=new Pen(Color.FromArgb(235,ThemeManager.Current["outline"]),Math.Max(1,font.Size/13f)){LineJoin=LineJoin.Round}){
+            using(var path=new GraphicsPath())using(var format=new StringFormat(StringFormat.GenericTypographic))using(var outline=new Pen(Color.FromArgb(235,ThemeManager.Current.Overlay["outline"]),Math.Max(1,font.Size/13f)){LineJoin=LineJoin.Round}){
                 format.FormatFlags|=StringFormatFlags.NoWrap;path.AddString(text??"",font.FontFamily,(int)font.Style,font.Size,PointF.Empty,format);var ink=path.GetBounds();ink.Inflate(outline.Width/2,outline.Width/2);
                 float x=align==StringAlignment.Near?area.Left:align==StringAlignment.Far?area.Right-ink.Width:area.Left+(area.Width-ink.Width)/2;
                 using(var move=new Matrix()){move.Translate(x-ink.Left,area.Top+(area.Height-ink.Height)/2-ink.Top);path.Transform(move);}outline.LineJoin=LineJoin.Round;g.DrawPath(outline,path);using(var brush=new SolidBrush(color))g.FillPath(brush,path);
@@ -168,7 +168,7 @@ namespace ConfidenceDesktop {
                 float benchSize=BenchFontSize(g,bounds,rank,rate);
                 using(var font=new Font("Microsoft YaHei UI",benchSize,FontStyle.Bold,GraphicsUnit.Pixel)){
                     var area=new RectangleF(bounds.X+BenchPadding(bounds),bounds.Y+1,bounds.Width-2*BenchPadding(bounds),bounds.Height-2);
-                    if(result.Row==null)BenchOutlinedText(g,rate,font,DesktopTheme.Muted,area,StringAlignment.Center);
+                    if(result.Row==null)BenchOutlinedText(g,rate,font,ThemeManager.Current.Overlay["desktop-muted"],area,StringAlignment.Center);
                     else{
                         float rankWidth=BenchTextWidth(g,rank,font),rateWidth=BenchTextWidth(g,rate,font);
                         BenchOutlinedText(g,rank,font,Gold,new RectangleF(area.Left,area.Y,rankWidth,area.Height),StringAlignment.Near);
@@ -181,7 +181,7 @@ namespace ConfidenceDesktop {
             RectangleF rateArea=new RectangleF(bounds.X,bounds.Y,bounds.Width,rateHeight);
             using(var font=new Font("Microsoft YaHei UI",size,FontStyle.Bold,GraphicsUnit.Pixel)){
                 if(result.PortraitArc){
-                    using(var brush=new SolidBrush(DesktopTheme.Surface))g.FillRectangle(brush,bounds);
+                    using(var brush=new SolidBrush(ThemeManager.Current.Overlay["panel"]))g.FillRectangle(brush,bounds);
                     Line(g,bounds.Left,bounds.Top,bounds.Right-1,bounds.Top);
                     Line(g,bounds.Left,bounds.Top,bounds.Left,bounds.Bottom);
                     Line(g,bounds.Right-1,bounds.Top,bounds.Right-1,bounds.Bottom);
@@ -190,8 +190,8 @@ namespace ConfidenceDesktop {
                     using(var format=new StringFormat{Alignment=StringAlignment.Center,LineAlignment=StringAlignment.Center,Trimming=StringTrimming.EllipsisCharacter,FormatFlags=StringFormatFlags.NoWrap}){
                         while(portraitSize>8){using(var number=new Font("Microsoft YaHei UI",portraitSize,FontStyle.Bold,GraphicsUnit.Pixel))if(g.MeasureString("#888",number,int.MaxValue,format).Width<=bounds.Width-4&&g.MeasureString("88.8%",number,int.MaxValue,format).Width<=bounds.Width-4)break;portraitSize=Math.Max(8,portraitSize-.5f);}
                         using(var number=new Font("Microsoft YaHei UI",portraitSize,FontStyle.Bold,GraphicsUnit.Pixel)){
-                            Text(g,result.Row==null?"暂无":"#"+result.Row.Rank,number,result.Row==null?DesktopTheme.Muted:Gold,new RectangleF(bounds.X+2,bounds.Y+1,bounds.Width-4,rowHeight));
-                            Text(g,result.Row==null?"数据":Statistics.Pct(result.Row.Lower),number,result.Row==null?DesktopTheme.Muted:RateColor(result.Row.Lower),new RectangleF(bounds.X+2,middle,bounds.Width-4,rowHeight));
+                            Text(g,result.Row==null?"暂无":"#"+result.Row.Rank,number,result.Row==null?ThemeManager.Current.Overlay["desktop-muted"]:Gold,new RectangleF(bounds.X+2,bounds.Y+1,bounds.Width-4,rowHeight));
+                            Text(g,result.Row==null?"数据":Statistics.Pct(result.Row.Lower),number,result.Row==null?ThemeManager.Current.Overlay["desktop-muted"]:RateColor(result.Row.Lower),new RectangleF(bounds.X+2,middle,bounds.Width-4,rowHeight));
                         }
                     }
                 }else{
@@ -248,8 +248,8 @@ namespace ConfidenceDesktop {
                     for(int i=0;i<rows.Count;i++){
                         var row=rows[i];float x=bounds.X+column*i;
                         if(i>0)Line(g,x,bounds.Y+8,x,bounds.Bottom-8);
-                        Text(g,row.Name.Replace(">"," > "),title,i==0?Gold:DesktopTheme.Text,new RectangleF(x+6,bounds.Y+5,column-12,25));
-                        string sub=SkillContext(result.Context,row.Pick);float subWidth=g.MeasureString(sub,label).Width;if(subWidth<=column-12)Text(g,sub,label,DesktopTheme.Muted,new RectangleF(x+6,bounds.Y+29,column-12,17));else using(var small=new Font("Microsoft YaHei UI",Math.Max(8,11*(column-12)/subWidth),FontStyle.Regular,GraphicsUnit.Pixel))Text(g,sub,small,DesktopTheme.Muted,new RectangleF(x+6,bounds.Y+29,column-12,17));
+                        Text(g,row.Name.Replace(">"," > "),title,i==0?Gold:ThemeManager.Current.Overlay["desktop-text"],new RectangleF(x+6,bounds.Y+5,column-12,25));
+                        string sub=SkillContext(result.Context,row.Pick);float subWidth=g.MeasureString(sub,label).Width;if(subWidth<=column-12)Text(g,sub,label,ThemeManager.Current.Overlay["desktop-muted"],new RectangleF(x+6,bounds.Y+29,column-12,17));else using(var small=new Font("Microsoft YaHei UI",Math.Max(8,11*(column-12)/subWidth),FontStyle.Regular,GraphicsUnit.Pixel))Text(g,sub,small,ThemeManager.Current.Overlay["desktop-muted"],new RectangleF(x+6,bounds.Y+29,column-12,17));
                         Line(g,x+10,divider,x+column-10,divider);
                         float metricY=divider+Math.Max(2,(bounds.Bottom-divider-40)/2);
                         Metric(g,"统计学胜率",Statistics.Pct(row.Lower),RateColor(row.Lower),new RectangleF(x+2,metricY,column-4,37));
@@ -278,7 +278,7 @@ namespace ConfidenceDesktop {
                 using(var label=new Font("Microsoft YaHei UI",10,FontStyle.Regular,GraphicsUnit.Pixel))
                 using(var value=new Font("Microsoft YaHei UI",13,FontStyle.Bold,GraphicsUnit.Pixel)){
                     Text(g,result.Card.Name,title,Gold,new RectangleF(bounds.X+9,bounds.Y+4,bounds.Width-93,23),StringAlignment.Near);
-                    Text(g,(result.Context??"").Replace("对局",""),context,DesktopTheme.Muted,new RectangleF(bounds.Right-82,bounds.Y+5,73,21),StringAlignment.Far);
+                    Text(g,(result.Context??"").Replace("对局",""),context,ThemeManager.Current.Overlay["desktop-muted"],new RectangleF(bounds.Right-82,bounds.Y+5,73,21),StringAlignment.Far);
                     var row=result.Row;
                     string[] labels={"排名","统计学胜率"};
                     string[] values={row==null?"—":"#"+row.Rank,row==null?"暂无数据":Statistics.Pct(row.Lower)};
@@ -286,7 +286,7 @@ namespace ConfidenceDesktop {
                     for(int i=0;i<labels.Length;i++){
                         float y=bounds.Y+33+i*29;
                         if(i>0)Line(g,bounds.X+9,y-2,bounds.Right-9,y-2);
-                        Text(g,labels[i],label,DesktopTheme.Muted,new RectangleF(bounds.X+10,y,bounds.Width-90,25),StringAlignment.Near);
+                        Text(g,labels[i],label,ThemeManager.Current.Overlay["desktop-muted"],new RectangleF(bounds.X+10,y,bounds.Width-90,25),StringAlignment.Near);
                         Text(g,values[i],value,colors[i],new RectangleF(bounds.Right-78,y,68,25),StringAlignment.Far);
                     }
                 }return;
@@ -295,12 +295,12 @@ namespace ConfidenceDesktop {
             using(var title=new Font("Microsoft YaHei UI",17,FontStyle.Bold,GraphicsUnit.Pixel))
             using(var label=new Font("Microsoft YaHei UI",11,FontStyle.Regular,GraphicsUnit.Pixel)){
                 Text(g,(result.Row==null?"暂无排名":"#"+result.Row.Rank)+"  "+result.Card.Name,title,Gold,new RectangleF(bounds.X+10,bounds.Y+8,bounds.Width-20,28));
-                Text(g,result.Context,label,DesktopTheme.Muted,new RectangleF(bounds.X+10,bounds.Y+37,bounds.Width-20,19));
+                Text(g,result.Context,label,ThemeManager.Current.Overlay["desktop-muted"],new RectangleF(bounds.X+10,bounds.Y+37,bounds.Width-20,19));
                 bool note=!string.IsNullOrEmpty(result.SampleNote);float metricY=bounds.Y+(note?67:75);
                 float half=bounds.Width/2f;
                 Metric(g,"统计学胜率",result.Row==null?"数据不足":Statistics.Pct(result.Row.Lower),RateColor(result.Row==null?double.NaN:result.Row.Lower),new RectangleF(bounds.X+2,metricY,half-4,37));
                 Metric(g,"统计学胜率提升",result.Row==null?"数据不足":Statistics.GainText(result.Row.GainLower),RateColor(result.Row==null||double.IsNaN(result.Row.GainLower)?double.NaN:.5+result.Row.GainLower),new RectangleF(bounds.X+half+2,metricY,half-4,37));
-                if(note)Text(g,result.SampleNote,label,DesktopTheme.Muted,new RectangleF(bounds.X+8,bounds.Y+106,bounds.Width-16,16));
+                if(note)Text(g,result.SampleNote,label,ThemeManager.Current.Overlay["desktop-muted"],new RectangleF(bounds.X+8,bounds.Y+106,bounds.Width-16,16));
             }
         }
     }

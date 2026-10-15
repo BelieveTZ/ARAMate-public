@@ -6,6 +6,7 @@ using System.Windows.Forms;
 
 namespace ConfidenceDesktop {
     partial class MainForm {
+        static Color MainRateColor(double value){return double.IsNaN(value)?ThemeManager.Current["muted"]:ThemeManager.Current.MainColor(BadgePaint.RateColor(value));}
         sealed class DisplayCell {
             internal string Text,Kind,TooltipNames,IconId;
             internal Color Color;
@@ -49,18 +50,18 @@ namespace ConfidenceDesktop {
                 yield return new DisplayRow{Source=row,Stages=single?(stages.ContainsKey(id)?stages[id]:new int[0]):null,HeroId=home?data.Heroes.Where(h=>h.Id>0&&h.Name==row.Name).Select(h=>h.Id).FirstOrDefault():0,Cells=new[]{
                     Cell(routes?row.Name+"\n"+row.ShoeAdvice:row.Rank==0?"—":row.Rank.ToString()),
                     Cell(routes?row.StarterName:home?ShortName(row.Name):row.Name,kind,tooltip:routes?row.StarterName:row.Name,iconId:!home&&!routes?Json.Str(Json.Get(row.Raw,"id")??Json.Get(row.Raw,"augmentId")):null),
-                    Cell(Percent(row.Lower),color:BadgePaint.RateColor(row.Lower)),
-                    Cell(Statistics.GainText(row.GainLower),color:BadgePaint.RateColor(double.IsNaN(row.GainLower)?double.NaN:.5+row.GainLower))
+                    Cell(Percent(row.Lower),color:MainRateColor(row.Lower)),
+                    Cell(Statistics.GainText(row.GainLower),color:MainRateColor(double.IsNaN(row.GainLower)?double.NaN:.5+row.GainLower))
                 }};
             }
         }
         IEnumerable<DisplayRow> EquipmentRows(Group group,bool plans,bool synergy){
             foreach(var row in group.Rows.Where(r=>plans||synergy||r.Name==(laterFlow.SelectedItem as string))){
-                Color color=synergy?BadgePaint.RateColor(row.Lower):row.ShoeAdvice=="X"?ThemeManager.Current["source-text"]:row.ShoeAdvice=="S"?Color.Gold:row.ShoeAdvice=="A"?Color.FromArgb(192,112,255):row.ShoeAdvice=="B"?Color.FromArgb(75,156,255):Color.FromArgb(80,190,110);
+                Color color=synergy?MainRateColor(row.Lower):row.ShoeAdvice=="X"?ThemeManager.Current["source-text"]:row.ShoeAdvice=="S"?Color.Gold:row.ShoeAdvice=="A"?Color.FromArgb(192,112,255):row.ShoeAdvice=="B"?Color.FromArgb(75,156,255):Color.FromArgb(80,190,110);
                 yield return new DisplayRow{Source=row,Cells=new[]{
-                    Cell(plans||synergy?row.Name:row.ShoeAdvice,(plans||synergy)&&row.Name!="★常规"?"augments":null,color:plans||synergy?default(Color):color,tooltip:(plans||synergy)&&row.Name!="★常规"?row.Name:null,bold:!plans&&!synergy),
+                    Cell(plans||synergy?row.Name:row.ShoeAdvice,(plans||synergy)&&row.Name!="★常规"?"augments":null,color:plans||synergy?default(Color):ThemeManager.Current.MainColor(color),tooltip:(plans||synergy)&&row.Name!="★常规"?row.Name:null,bold:!plans&&!synergy),
                     Cell(row.StarterName,"items",tooltip:row.StarterName),
-                    Cell(plans?"":Percent(row.Lower),color:plans||synergy?color:BadgePaint.RateColor(row.Lower)),Cell(plans||synergy?"":Statistics.GainText(row.GainLower),color:BadgePaint.RateColor(.5+row.GainLower))
+                    Cell(plans?"":Percent(row.Lower),color:plans||synergy?ThemeManager.Current.MainColor(color):MainRateColor(row.Lower)),Cell(plans||synergy?"":Statistics.GainText(row.GainLower),color:MainRateColor(.5+row.GainLower))
                 }};
             }
         }

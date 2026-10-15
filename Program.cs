@@ -190,7 +190,7 @@ namespace ConfidenceDesktop {
         Form settingsWindow;
         void SelectTheme(string id){ThemeManager.Select(id);ThemeSettings.Save(ThemeManager.Current.Id);}
         ThemePalette paintedTheme=ThemeManager.Current;
-        static Color Recolor(Color value,ThemePalette before,ThemePalette after){foreach(var key in before.Css().Keys.Where(k=>k!="crumb"))if(value.ToArgb()==before[key].ToArgb())return after[key];return value;}
+        static Color Recolor(Color value,ThemePalette before,ThemePalette after){foreach(var key in before.ColorKeys)if(value.ToArgb()==before[key].ToArgb())return after[key];return value;}
         static void RecolorControls(Control control,ThemePalette before,ThemePalette after){
             control.BackColor=Recolor(control.BackColor,before,after);control.ForeColor=Recolor(control.ForeColor,before,after);
             var table=control as DataGridView;if(table!=null){table.BackgroundColor=Recolor(table.BackgroundColor,before,after);table.GridColor=Recolor(table.GridColor,before,after);foreach(var style in new[]{table.DefaultCellStyle,table.AlternatingRowsDefaultCellStyle,table.ColumnHeadersDefaultCellStyle}){style.BackColor=Recolor(style.BackColor,before,after);style.ForeColor=Recolor(style.ForeColor,before,after);style.SelectionBackColor=Recolor(style.SelectionBackColor,before,after);style.SelectionForeColor=Recolor(style.SelectionForeColor,before,after);}}
@@ -198,9 +198,9 @@ namespace ConfidenceDesktop {
             foreach(Control child in control.Controls)RecolorControls(child,before,after);control.Invalidate();
         }
         void ThemeChanged(object sender,EventArgs args){
-            var next=ThemeManager.Current;Color rateColor=summaryRate.ForeColor;bool hasRate=rateColor.ToArgb()!=paintedTheme["desktop-muted"].ToArgb();RecolorControls(this,paintedTheme,next);if(hasRate)summaryRate.ForeColor=rateColor;if(settingsWindow!=null&&!settingsWindow.IsDisposed)RecolorControls(settingsWindow,paintedTheme,next);if(dataUpdateWindow!=null&&!dataUpdateWindow.IsDisposed)RecolorControls(dataUpdateWindow,paintedTheme,next);paintedTheme=next;
+            var next=ThemeManager.Current;Color rateColor=summaryRate.ForeColor;bool hasRate=rateColor.ToArgb()!=paintedTheme["desktop-muted"].ToArgb();RecolorControls(this,paintedTheme,next);if(hasRate){var summaryRow=groups.Where(g=>g.Path=="champions/champion/stats").SelectMany(g=>g.Rows).FirstOrDefault();summaryRate.ForeColor=MainRateColor(summaryRow==null?double.NaN:summaryRow.Lower);}if(settingsWindow!=null&&!settingsWindow.IsDisposed)RecolorControls(settingsWindow,paintedTheme,next);if(dataUpdateWindow!=null&&!dataUpdateWindow.IsDisposed)RecolorControls(dataUpdateWindow,paintedTheme,next);paintedTheme=next;
             if(web!=null&&!web.IsDisposed)web.DefaultBackgroundColor=DesktopTheme.Canvas;
-            cachedWebRows=null;lastWebState=null;if(classicActive)ShowRows();SendWeb(new{type="theme",theme=next.Id,palette=next.Css()});ScheduleWeb();
+            cachedWebRows=null;lastWebState=null;ShowRows();SendWeb(new{type="theme",theme=next.Id,palette=next.Css()});ScheduleWeb();
         }
         void ShowSettings(){if(settingsWindow!=null&&!settingsWindow.IsDisposed){settingsWindow.Activate();return;}var dialog=new Form{Text="设置",Icon=Icon,ClientSize=new Size(420,200),FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,StartPosition=FormStartPosition.Manual,Font=DesktopTheme.Body};settingsWindow=dialog;dialog.Location=new Point(Left+(Width-dialog.Width)/2,Top+(Height-dialog.Height)/2);dialog.FormClosed+=(sender,args)=>{settingsWindow=null;};
             var label=new Label{Text="局内技能加点",AutoSize=true,Location=new Point(20,20)};
@@ -273,7 +273,7 @@ namespace ConfidenceDesktop {
                 if(viewedHero!=SelectedHero.Id){section=classicActive?"海克斯":OverviewSection;oldPath=null;}viewedHero=SelectedHero.Id;
                 groups=loaded;back.Visible=!home;pageTitle.Visible=home;pageTitle.Font=DesktopTheme.Title;pageTitle.Text=home?"英雄总榜":ShortName(SelectedHero.Name);pageTitle.ForeColor=DesktopTheme.Text;tabs.Visible=!home;filters.Visible=!home;summary.Visible=!home;summaryRate.Visible=!home;
                 var baseline=groups.FirstOrDefault(g=>g.Path=="champions/champion/stats");var row=baseline==null?null:baseline.Rows.FirstOrDefault();
-                summary.Text=ShortName(SelectedHero.Name)+"     ";rankCaption.ForeColor=DesktopTheme.Muted;winCaption.ForeColor=DesktopTheme.Muted;rankValue.Text="#"+(row!=null&&row.Rank>0?row.Rank.ToString():"—")+"     ";rankCaption.Visible=!home;rankValue.Visible=!home;winCaption.Visible=!home;summaryRate.Text=row==null?"":Percent(row.Lower);summaryRate.ForeColor=BadgePaint.RateColor(row==null?double.NaN:row.Lower);
+                summary.Text=ShortName(SelectedHero.Name)+"     ";rankCaption.ForeColor=DesktopTheme.Muted;winCaption.ForeColor=DesktopTheme.Muted;rankValue.Text="#"+(row!=null&&row.Rank>0?row.Rank.ToString():"—")+"     ";rankCaption.Visible=!home;rankValue.Visible=!home;winCaption.Visible=!home;summaryRate.Text=row==null?"":Percent(row.Lower);summaryRate.ForeColor=MainRateColor(row==null?double.NaN:row.Lower);
 
                 categories.DataSource=groups;
                 if(home)categories.SelectedItem=groups.FirstOrDefault(g=>g.Path=="champions/rows");else BuildFilters(oldPath);

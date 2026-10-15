@@ -71,7 +71,7 @@ namespace ConfidenceDesktop {
         void SaveStatisticsMode(){StatisticsSettings.Save(advancedMode);cachedWebRows=null;cachedOverview=null;ScheduleWeb();}
         // Theme swatch background: halfway between the bottom layer (bg) and the table (panel). bg alone makes every theme look black; panel blends into the menu.
         static string SwatchBackground(ThemePalette p){Color a=p["bg"],b=p["panel"];return "#"+((a.R+b.R)/2).ToString("x2")+((a.G+b.G)/2).ToString("x2")+((a.B+b.B)/2).ToString("x2");}
-        static object RangeColor(double value){return double.IsNaN(value)?null:ColorTranslator.ToHtml(BadgePaint.RateColor(value));}
+        static object RangeColor(double value){return double.IsNaN(value)?null:ColorTranslator.ToHtml(MainRateColor(value));}
         static object WebNumber(double value){return double.IsNaN(value)||double.IsInfinity(value)?null:(object)value;}
         // Main-window statistics mode (2.0.0): advanced shows the statistical values with number lines, simple shows observed values only.
         // The levels are the fixed ones recommendations and overlays use, so every number matches the game (no user choice: the user decided
@@ -96,8 +96,8 @@ namespace ConfidenceDesktop {
             var place=ArrangeRows(rows,r=>StatsAt(r.Win,r.Count,r.Pick,Statistics.WinBounds(r.Raw,WinLevel),Statistics.Interval.Empty),false).FirstOrDefault(x=>(int)Json.Num(Json.Get(x.Item.Raw,"id"),0)==SelectedHero.Id);
             return place==null||place.Place=="—"?"#—":"#"+place.Place;
         }
-        object RateCell(Dictionary<string,object> stats){double v=Stat(stats,"lower");return WebCell(Cell(Statistics.Pct(v),color:BadgePaint.RateColor(v)));}
-        object GainCell(Dictionary<string,object> stats){double v=Stat(stats,"gain");return WebCell(Cell(Statistics.GainText(v),color:BadgePaint.RateColor(double.IsNaN(v)?double.NaN:.5+v)));}
+        object RateCell(Dictionary<string,object> stats){double v=Stat(stats,"lower");return WebCell(Cell(Statistics.Pct(v),color:MainRateColor(v)));}
+        object GainCell(Dictionary<string,object> stats){double v=Stat(stats,"gain");return WebCell(Cell(Statistics.GainText(v),color:MainRateColor(double.IsNaN(v)?double.NaN:.5+v)));}
         sealed class Placed<T>{internal T Item;internal Dictionary<string,object> Stats;internal string Place;}
         // Advanced: statistical win rate (one decimal) -> gain -> games, or gain first on the gain boards. Simple: observed win rate (or observed gain) -> games.
         List<Placed<T>> ArrangeRows<T>(IEnumerable<T> items,Func<T,Dictionary<string,object>> stats,bool gainFirst){
@@ -141,7 +141,7 @@ namespace ConfidenceDesktop {
         async void FillWebIcons(){await FillWebIconsAsync();}
         async Task FillWebIconsAsync(){var snapshot=data;if(string.IsNullOrEmpty(snapshot.Root))return;try{var downloaded=await Task.Run(()=>{var tooltip=WebsiteData.FillTooltipIcons(snapshot);var images=WebsiteData.FillImageIcons(snapshot);return tooltip.Downloaded+images.Downloaded;});if(IsDisposed||Disposing||snapshot!=data||downloaded==0)return;webImageRevision++;cachedWebRows=null;lastWebState=null;ScheduleWeb();}catch{}}
         Dictionary<string,string> WebIcons(){var result=new Dictionary<string,string>();foreach(string asset in webIconAssets){string uri;if(!tooltipIconUris.TryGetValue(asset,out uri)){try{string path=WebsiteData.PathUnder(data.Root,asset);if(!File.Exists(path))continue;uri="data:image/"+(asset.EndsWith(".png")?"png":"webp")+";base64,"+Convert.ToBase64String(File.ReadAllBytes(path));tooltipIconUris[asset]=uri;}catch{continue;}}result[asset]=uri;}return result;}
-        static string ThemeCss(string html){return Regex.Replace(html,@":root\{[^}]*\}",":root{color-scheme:dark;"+string.Join(";",ThemeManager.Current.Css().Select(p=>"--"+p.Key+":"+p.Value))+";--teal:#00b69f}",RegexOptions.None);}
+        static string ThemeCss(string html){return Regex.Replace(html,@":root\{[^}]*\}",":root{color-scheme:"+(ThemeManager.Current.IsLight?"light":"dark")+";"+string.Join(";",ThemeManager.Current.Css().Select(p=>"--"+p.Key+":"+p.Value))+";--teal:#00b69f}",RegexOptions.None);}
         void PrepareWeb(Control layout){
             classicLayout=layout;layout.Visible=false;BackColor=DesktopTheme.Canvas;
             if(StartupTrace.ForceClassic)return;
@@ -212,7 +212,7 @@ namespace ConfidenceDesktop {
             return Json.Write(new {
                 type="state",board=webBoard,gainView=webGainView,heroIcon=home?null:WebsiteData.ImageIcon(data,"champions",id:SelectedHero.Id.ToString()),home=home,hero=home?"英雄总榜":ShortName(SelectedHero.Name),title=home?"":HeroNames.Title(SelectedHero.Name),name=home?"":HeroNames.Name(SelectedHero.Name),heroId=home?0:SelectedHero.Id,
                 section=section,group=group==null?"":group.Path,overview=WebOverview(),
-                rank=home?"":HeroPlace(),rate=heroRate==null?"":Statistics.Pct(heroRate.Value),heroWin=heroStats==null?null:WebNumber(heroStats.Win),heroCount=heroStats==null?null:WebNumber(heroStats.Count),rateColor=ColorTranslator.ToHtml(BadgePaint.RateColor(heroRate??double.NaN)),
+                rank=home?"":HeroPlace(),rate=heroRate==null?"":Statistics.Pct(heroRate.Value),heroWin=heroStats==null?null:WebNumber(heroStats.Win),heroCount=heroStats==null?null:WebNumber(heroStats.Count),rateColor=ColorTranslator.ToHtml(MainRateColor(heroRate??double.NaN)),
                 advanced=advancedMode,
                 tabs=tabs.Controls.OfType<NavigationButton>().Select(b=>b.Text).ToArray(),
                 filters=filters.Controls.OfType<NavigationButton>().Select(b=>new {text=b.Text,path=(string)b.Tag,enabled=b.Enabled}).ToArray(),

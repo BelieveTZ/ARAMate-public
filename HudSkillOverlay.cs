@@ -40,7 +40,7 @@ namespace ConfidenceDesktop {
         protected override void OnPaint(PaintEventArgs e){
             e.Graphics.SmoothingMode=System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             using(var path=DesktopTheme.Rounded(new Rectangle(0,0,Math.Max(1,Width-1),Math.Max(1,Height-1)),0))
-            using(var brush=new SolidBrush(DesktopTheme.Surface))e.Graphics.FillPath(brush,path);
+            using(var brush=new SolidBrush(ThemeManager.Current.Overlay["panel"]))e.Graphics.FillPath(brush,path);
         }
         public void PresentPanel(Rectangle area){bool moved=Bounds!=area,shown=Visible;if(moved)Bounds=area;if(!shown)Show();if(moved||!shown)NativeOverlay.SetWindowPos(Handle,new IntPtr(-1),area.X,area.Y,area.Width,area.Height,0x0010|0x0040);}
     }
