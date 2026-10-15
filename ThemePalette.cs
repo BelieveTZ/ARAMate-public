@@ -55,8 +55,8 @@ namespace ConfidenceDesktop {
                 var color=p.colors[key];int gray=(color.R+color.G+color.B)/3;p.colors[key]=Color.FromArgb(gray,gray,gray);
             }p.colors["accent-text"]=Hex("#080304");p.colors["selected-text"]=p.colors["accent-text"];return p;}
         public static readonly ThemePalette Demacia=CreateDemacia();
-        // Demacia (2.1.2): dark like the other themes, Lux navy as the base and white as the accent; the overlays use the same palette.
-        static ThemePalette CreateDemacia(){var p=Create("demacia","德玛西亚",new[]{"#161c2c","#232d45","#1b2337","#4a5878","#ffffff","#c3cbdc","#ffffff","#313d5c","#2b3652"});p.colors["outline"]=Hex("#060a0e");p.colors["desktop-text"]=Color.White;p.colors["desktop-muted"]=Hex("#c3cbdc");return p;}
+        // Demacia: preserve the navy palette offsets from panel; white remains the accent.
+        static ThemePalette CreateDemacia(){Color basis=Hex("#0d1a5c");Func<int,int,int,string> blue=(r,g,b)=>ColorTranslator.ToHtml(Color.FromArgb(Clamp(basis.R+r),Clamp(basis.G+g),Clamp(basis.B+b)));var p=Create("demacia","德玛西亚",new[]{blue(-13,-17,-25),blue(0,0,0),blue(-8,-10,-14),blue(39,43,51),"#ffffff","#c3cbdc","#ffffff",blue(14,16,23),blue(8,9,13)});p.colors["outline"]=Hex("#060a0e");p.colors["desktop-text"]=Color.White;p.colors["desktop-muted"]=Hex("#c3cbdc");return p;}
         public static readonly ThemePalette[] All={Piltover,Void,Shadow,Noxus,Demacia};
         public static ThemePalette Find(string id){return All.FirstOrDefault(p=>p.Id==id)??Piltover;}
     }

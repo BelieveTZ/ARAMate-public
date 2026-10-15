@@ -11,8 +11,8 @@ namespace ConfidenceDesktop {
             try { if (!System.IO.Directory.Exists(LocalDataDirectory) && System.IO.Directory.Exists(oldDirectory)) System.IO.Directory.Move(oldDirectory, LocalDataDirectory); }
             catch (System.IO.IOException) {} catch (System.UnauthorizedAccessException) {}
         }
-        public const string Number = "2.1.2";
-        public const string ReleaseDate = "2026.1015";
+        public const string Number = "2.1.3";
+        public const string ReleaseDate = "2026.1016";
         public const string Display = Number;
     }
 }

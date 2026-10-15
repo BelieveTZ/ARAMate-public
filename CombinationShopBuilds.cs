@@ -112,7 +112,7 @@ namespace ConfidenceDesktop {
    }
    return planned.Where((item,index)=>keep[index]).ToArray();
   }
-  static List<object> PurchaseOrder(DataStore data,object raw,RouteChoice choice,string[] pair,Evidence[] evidence,SpecialRoute main=null,bool secondary=true){
+  static List<object> PurchaseOrder(DataStore data,object raw,RouteChoice choice,string[] pair,Evidence[] evidence,SpecialRoute main=null,bool secondary=true,object hydraContext=null){
    var scoringEvidence=secondary?evidence:evidence.Take(1).ToArray();
    var planned=new List<object>();var mandatory=new HashSet<string>();
    foreach(var item in choice.PreFusionRecipe.Concat(Json.Arr(Json.Get(choice.Route,"purchaseOrder"))).Concat((main==null?choice.FollowupCore:new object[0]))){
@@ -135,7 +135,7 @@ namespace ConfidenceDesktop {
    string boot=main==null?Pick(data,0,evidence,id=>Shoe(data,id),existingIds):Id(choice.Boot);
    if(string.IsNullOrEmpty(boot)){string fallback=Id(choice.Boot);if(Shoe(data,fallback))boot=fallback;}
    if(string.IsNullOrEmpty(boot)){var fallback=Json.Arr(Json.Get(Json.Get(Json.Get(raw,"items"),"filtered"),"all")).Where(i=>Shoe(data,Id(i))&&!double.IsNaN(Statistics.Calculate(i).Lower)).OrderByDescending(i=>Statistics.Calculate(i).Lower).FirstOrDefault();boot=Id(fallback);}
-   if(boot.Length>0&&!existingIds.Contains(boot)){var shell=Copy(choice);shell.Boot=Item(boot);shell.FollowupCore=new object[0];int position=EquipmentRecommendations.CorePurchaseSequence(data,shell).FindIndex(i=>Id(i)==boot);planned.Insert(Math.Min(planned.Count,Math.Max(0,position)),Item(boot));existingIds.Add(boot);}
+   if(boot.Length>0&&!existingIds.Contains(boot)){var shell=Copy(choice);shell.Boot=Item(boot);shell.FollowupCore=new object[0];int position=EquipmentRecommendations.CoreSequence(shell).FindIndex(i=>Id(i)==boot);planned.Insert(Math.Min(planned.Count,Math.Max(0,position)),Item(boot));existingIds.Add(boot);}
    while(Occupied(data,planned,pair)<4){
     int slot=Occupied(data,planned,pair)+1;
     string next=main==null?null:PriorityPick(data,raw,choice,main,slot,evidence,existingIds,secondary);
@@ -143,6 +143,11 @@ namespace ConfidenceDesktop {
     if(next==null){var fallback=EquipmentRecommendations.Ratings(data,raw,slot).FirstOrDefault(r=>r.Grade!="X"&&Gear(data,Id(r.Item))&&!existingIds.Contains(Id(r.Item)));next=fallback==null?null:Id(fallback.Item);}
     if(next==null)break;
     planned.Add(Item(next));existingIds.Add(next);
+   }
+   if(pair.Any(id=>data.Lookup("augments",id)=="终极九头蛇")){
+    var hydra=main!=null&&data.Lookup("augments",main.AugmentId)=="终极九头蛇"?main:null;
+    var context=hydra!=null&&hydra.ConditionalData!=null?hydra.ConditionalData:hydraContext;
+    var shell=Copy(choice);shell.Boot=planned.FirstOrDefault(i=>Shoe(data,Id(i)));planned=RouteRecommendations.ConfigureHydraShoes(data,context,shell,planned);
    }
    return planned;
   }
@@ -225,12 +230,14 @@ namespace ConfidenceDesktop {
     if(mainIndex>=0){if(!specials.TryGetValue(pair[mainIndex],out main))main=new SpecialRoute{AugmentId=pair[mainIndex]};choice=main.Choice??normal;evidence=new[]{evidence[mainIndex],evidence[1-mainIndex]};}
     else choice=ChooseRoute(data,normal,specials,pair,evidence);
     string fallbackReason=!hasConditional?"缺少单海克斯装备数据文件":choice==null?"没有可用的推导核心方案":null,fallbackPlan=null;
-    var order=fallbackReason==null?PurchaseOrder(data,raw,choice,pair,evidence,main):new List<object>();
+    string hydraId=pair.FirstOrDefault(id=>data.Lookup("augments",id)=="终极九头蛇");
+    object hydraContext=hydraId==null?null:new Dictionary<string,object>{{"items",new Dictionary<string,object>{{"filtered",byId.ContainsKey(hydraId)?byId[hydraId]:null}}}};
+    var order=fallbackReason==null?PurchaseOrder(data,raw,choice,pair,evidence,main,hydraContext:hydraContext):new List<object>();
     if(fallbackReason==null&&!order.Any(i=>Gear(data,Id(i))))fallbackReason=order.Count==0?"推导购买顺序为空":"推导核心没有成装";
     if(fallbackReason!=null)choice=FallbackCore(data,normal,specials,pair,mainIndex,out order,out fallbackPlan);
     var later=Later(data,raw,choice,pair,evidence,main,order);
     bool changed=mainIndex<0;
-    if(mainIndex>=0&&fallbackReason==null){var original=PurchaseOrder(data,raw,choice,pair,evidence,main,false);var originalLater=Later(data,raw,choice,pair,evidence,main,original,false);changed=!order.Select(Id).SequenceEqual(original.Select(Id))||First(later.Fifth)!=First(originalLater.Fifth)||First(later.Sixth)!=First(originalLater.Sixth);}
+    if(mainIndex>=0&&fallbackReason==null){var original=PurchaseOrder(data,raw,choice,pair,evidence,main,false,hydraContext);var originalLater=Later(data,raw,choice,pair,evidence,main,original,false);changed=!order.Select(Id).SequenceEqual(original.Select(Id))||First(later.Fifth)!=First(originalLater.Fifth)||First(later.Sixth)!=First(originalLater.Sixth);}
     string mainName=mainIndex<0?"":data.Lookup("augments",pair[mainIndex]);
     if(fallbackReason!=null&&mainIndex>=0)changed=fallbackPlan!=mainName;
     string note=(mainIndex<0?"两者兼顾":"以"+mainName+"为主")+"（提升 "+LiftText(lifts[mainIndex<0?0:mainIndex])+" 对 "+LiftText(lifts[mainIndex<0?1:1-mainIndex])+" 个百分点）"+(fallbackReason!=null?"；出装同"+fallbackPlan+"方案":mainIndex>=0&&!changed?"；出装同"+mainName+"方案":"")+"。";
@@ -238,6 +245,7 @@ namespace ConfidenceDesktop {
     string label=string.Join("＋",displayPair.Select(id=>data.Lookup("augments",id)));
     string key="combo-"+string.Join("-",pair.OrderBy(id=>int.Parse(id)));
     string title=label;
+    order=EquipmentRecommendations.OrderTaskPurchases(data,order,pair.Select(id=>data.Lookup("augments",id)));
     var blocks=new List<object>(new[]{ShopBuilds.Block("出门装",Json.Arr(Json.Get(choice.Starter,"items"))),ShopBuilds.Block("组合 · 购买顺序",order)}.Where(b=>b!=null));
     ShopBuilds.AddLaterBlocks(blocks,slot=>slot==5?later.Fifth:later.Sixth);
     var set=new Dictionary<string,object>{{"title",title},{"type","custom"},{"map","HA"},{"mode","any"},{"associatedChampions",new[]{hero}},{"associatedMaps",new[]{12}},{"preferredItemSlots",new object[0]},{"sortrank",3},{"startedFrom","blank"},{"uid",ShopBuilds.Uid(hero,key)},{"blocks",blocks.ToArray()}};

@@ -55,11 +55,13 @@ namespace ConfidenceDesktop {
                 }};
             }
         }
+        static DisplayCell EquipmentGrade(Row row){return Cell(row.ShoeAdvice,color:ThemeManager.Current.MainColor(EquipmentGradeColor(row)),bold:true);}
+        static Color EquipmentGradeColor(Row row){return row.ShoeAdvice=="X"?ThemeManager.Current["source-text"]:row.ShoeAdvice=="S"?Color.Gold:row.ShoeAdvice=="A"?Color.FromArgb(192,112,255):row.ShoeAdvice=="B"?Color.FromArgb(75,156,255):Color.FromArgb(80,190,110);}
         IEnumerable<DisplayRow> EquipmentRows(Group group,bool plans,bool synergy){
             foreach(var row in group.Rows.Where(r=>plans||synergy||r.Name==(laterFlow.SelectedItem as string))){
-                Color color=synergy?MainRateColor(row.Lower):row.ShoeAdvice=="X"?ThemeManager.Current["source-text"]:row.ShoeAdvice=="S"?Color.Gold:row.ShoeAdvice=="A"?Color.FromArgb(192,112,255):row.ShoeAdvice=="B"?Color.FromArgb(75,156,255):Color.FromArgb(80,190,110);
+                Color color=synergy?MainRateColor(row.Lower):EquipmentGradeColor(row);
                 yield return new DisplayRow{Source=row,Cells=new[]{
-                    Cell(plans||synergy?row.Name:row.ShoeAdvice,(plans||synergy)&&row.Name!="★常规"?"augments":null,color:plans||synergy?default(Color):ThemeManager.Current.MainColor(color),tooltip:(plans||synergy)&&row.Name!="★常规"?row.Name:null,bold:!plans&&!synergy),
+                    plans||synergy?Cell(row.Name,row.Name!="★常规"?"augments":null,tooltip:row.Name!="★常规"?row.Name:null):EquipmentGrade(row),
                     Cell(row.StarterName,"items",tooltip:row.StarterName),
                     Cell(plans?"":Percent(row.Lower),color:plans||synergy?ThemeManager.Current.MainColor(color):MainRateColor(row.Lower)),Cell(plans||synergy?"":Statistics.GainText(row.GainLower),color:MainRateColor(.5+row.GainLower))
                 }};

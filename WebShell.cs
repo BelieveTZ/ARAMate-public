@@ -66,11 +66,11 @@ namespace ConfidenceDesktop {
         }
         // Overview core build card: the plan's best fifth / sixth item (first S-grade row of that plan); empty when the core already fixes the slot.
         object BestLater(int slot,string plan){var group=groups.FirstOrDefault(g=>g.Path==EquipmentRecommendations.Prefix+"later/"+slot);var best=group==null?null:group.Rows.FirstOrDefault(r=>r.Name==plan&&r.ShoeAdvice=="S");
-            return WebCell(best==null?Cell(""):Cell(best.StarterName,"items",tooltip:best.StarterName));}
+            return WebCell(best==null?Cell(""):Cell(best.StarterName,"items",tooltip:best.StarterName),best==null?null:EquipmentGrade(best));}
         // The number-line gradient ends in the high end's own rate color (same scale as the shown values).
         void SaveStatisticsMode(){StatisticsSettings.Save(advancedMode);cachedWebRows=null;cachedOverview=null;ScheduleWeb();}
-        // Theme swatch background: halfway between the bottom layer (bg) and the table (panel). bg alone makes every theme look black; panel blends into the menu.
-        static string SwatchBackground(ThemePalette p){Color a=p["bg"],b=p["panel"];return "#"+((a.R+b.R)/2).ToString("x2")+((a.G+b.G)/2).ToString("x2")+((a.B+b.B)/2).ToString("x2");}
+        // Normal table rows are transparent over tbody, whose background is panel.
+        static string SwatchBackground(ThemePalette p){return p.Css()["panel"];}
         static object RangeColor(double value){return double.IsNaN(value)?null:ColorTranslator.ToHtml(MainRateColor(value));}
         static object WebNumber(double value){return double.IsNaN(value)||double.IsInfinity(value)?null:(object)value;}
         // Main-window statistics mode (2.0.0): advanced shows the statistical values with number lines, simple shows observed values only.
@@ -89,6 +89,17 @@ namespace ConfidenceDesktop {
         }
         static double Stat(Dictionary<string,object> stats,string key){object value;return stats!=null&&stats.TryGetValue(key,out value)&&value is double?(double)value:double.NaN;}
         static double Ordered(double value){return double.IsNaN(value)?double.NegativeInfinity:value;}
+        // Calibrate once per already-loaded board reference; never read website data from the UI.
+        List<Group> axisScaleBoard;double? axisScale;
+        double? SharedAxisScale(){
+            var board=data.CachedBoardGroups(Scope);
+            if(ReferenceEquals(board,axisScaleBoard))return axisScale;
+            axisScaleBoard=board;axisScale=null;if(board==null)return null;
+            var group=board.FirstOrDefault(g=>g.Path=="champions/rows");if(group==null)return null;
+            var widths=group.Rows.Select(r=>{var bounds=Statistics.WinBounds(r.Raw,WinLevel);return !double.IsNaN(r.Win)&&!double.IsInfinity(r.Win)&&bounds.Upper>=bounds.Lower?Math.Max(0,Math.Max(r.Win-bounds.Lower,bounds.Upper-r.Win)):double.NaN;}).Where(v=>!double.IsNaN(v)&&!double.IsInfinity(v)).OrderBy(v=>v).ToArray();
+            if(widths.Length>0)axisScale=widths[widths.Length<4?widths.Length-1:(int)Math.Ceiling(widths.Length*.75)-1];
+            return axisScale;
+        }
         // The hero's place on the win-rate board in the current mode; falls back to the loaded rank before the board is cached.
         string HeroPlace(){
             var board=data.CachedBoardGroups(Scope);var rows=board==null?null:board.Where(g=>g.Path=="champions/rows").Select(g=>g.Rows).FirstOrDefault();
@@ -186,7 +197,8 @@ namespace ConfidenceDesktop {
             if(!webReady||webScheduled||IsDisposed||!IsHandleCreated)return;
             webScheduled=true;BeginInvoke((Action)(()=>{webScheduled=false;if(!IsDisposed&&webReady)PublishWeb();}));
         }
-        object WebCell(DisplayCell cell) {
+        object WebCell(DisplayCell cell){return WebCell(cell,null);}
+        object WebCell(DisplayCell cell,DisplayCell grade) {
             string text=cell.Text,kind=cell.Kind??"";
    var parts=Regex.Split(text??"",@"( → | \+ |>|\n)").Where(p=>p.Length>0).Select(p=>{
                 string name=Regex.Replace(p.Trim(),@"\s*×\s*\d+$","");
@@ -195,7 +207,7 @@ namespace ConfidenceDesktop {
                 var part=new Dictionary<string,object>{{"text",p},{"tip",kind.Length>0?EffectText.Single(data,kind,name):""},{"rich",rich}};string icon=WebsiteData.ImageIcon(data,kind,name,cell.IconId);if(icon!=null&&!Regex.IsMatch(p,@"\A[ →+>\s]+\z"))part["icon"]=icon;return part;
             }).ToArray();
             Color color=cell.Color;
-            return new {text=text,parts=parts,color=color.IsEmpty?null:ColorTranslator.ToHtml(color),bold=cell.Bold};
+            return new {text=text,parts=parts,color=color.IsEmpty?null:ColorTranslator.ToHtml(color),bold=cell.Bold,grade=grade==null?null:WebCell(grade)};
         }
         string CoreWebState() {
             var group=categories.SelectedItem as Group;bool home=SelectedHero==null||SelectedHero.Id==0;
@@ -213,7 +225,7 @@ namespace ConfidenceDesktop {
                 type="state",board=webBoard,gainView=webGainView,heroIcon=home?null:WebsiteData.ImageIcon(data,"champions",id:SelectedHero.Id.ToString()),home=home,hero=home?"英雄总榜":ShortName(SelectedHero.Name),title=home?"":HeroNames.Title(SelectedHero.Name),name=home?"":HeroNames.Name(SelectedHero.Name),heroId=home?0:SelectedHero.Id,
                 section=section,group=group==null?"":group.Path,overview=WebOverview(),
                 rank=home?"":HeroPlace(),rate=heroRate==null?"":Statistics.Pct(heroRate.Value),heroWin=heroStats==null?null:WebNumber(heroStats.Win),heroCount=heroStats==null?null:WebNumber(heroStats.Count),rateColor=ColorTranslator.ToHtml(MainRateColor(heroRate??double.NaN)),
-                advanced=advancedMode,
+                advanced=advancedMode,axisScale=SharedAxisScale(),
                 tabs=tabs.Controls.OfType<NavigationButton>().Select(b=>b.Text).ToArray(),
                 filters=filters.Controls.OfType<NavigationButton>().Select(b=>new {text=b.Text,path=(string)b.Tag,enabled=b.Enabled}).ToArray(),
                 flows=laterFlow.Items.Cast<object>().Select(Convert.ToString).ToArray(),flow=laterFlow.SelectedIndex,

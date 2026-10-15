@@ -94,13 +94,23 @@ namespace ConfidenceDesktop {
   public static List<object> CoreSequence(RouteChoice c){
    var core=Json.Arr(Json.Get(c.Route,"purchaseOrder")).ToList();string boot=Json.Str(Json.Get(c.Boot,"id"));
    bool already=Json.Arr(Json.Get(c.Starter,"items")).Concat(core).Any(i=>Json.Str(Json.Get(i,"id"))==boot);
-   if(c.Boot!=null&&!already){var match=System.Text.RegularExpressions.Regex.Match(c.ShoeAdvice??"",@"建议第\s*(\d)");int position=match.Success?int.Parse(match.Groups[1].Value):2;core.Insert(Math.Min(core.Count,Math.Max(0,position-1)),c.Boot);}
+   if(c.Boot!=null&&!already&&c.ShoePositionAfterFusion==0){var match=System.Text.RegularExpressions.Regex.Match(c.ShoeAdvice??"",@"建议第\s*(\d)");int position=match.Success?int.Parse(match.Groups[1].Value):2;core.Insert(Math.Min(core.Count,Math.Max(0,position-1)),c.Boot);}
    core.InsertRange(0,c.PreFusionRecipe);
    core.AddRange(c.FollowupCore);
+   if(c.Boot!=null&&!already&&c.ShoePositionAfterFusion>0)core.Insert(Math.Min(core.Count,c.ShoePositionAfterFusion+1),c.Boot);
    return core;
   }
   public static List<object> CorePurchaseSequence(DataStore d,RouteChoice c){
-   return c==null?new List<object>():CoreSequence(c);
+   if(c==null)return new List<object>();var order=OrderTaskPurchases(d,CoreSequence(c),new[]{c.FusionAugment});
+   if(c.FusionAugment=="终极九头蛇"&&c.Boot!=null&&c.ShoePositionAfterFusion>0){string boot=Json.Str(Json.Get(c.Boot,"id"));order.RemoveAll(i=>Json.Str(Json.Get(i,"id"))==boot);order.Insert(Math.Min(order.Count,c.ShoePositionAfterFusion+1),c.Boot);}
+   return order;
+  }
+  public static List<object> OrderTaskPurchases(DataStore d,IEnumerable<object> purchases,IEnumerable<string> augmentNames){
+   var order=purchases.ToList();
+   if(!augmentNames.Contains("终极九头蛇"))return order;
+   var recipe=new HashSet<string>(SpecialRoutes.RequiredItems("终极九头蛇"));
+   // Finish all three Hydras before boots or other items, preserving both groups' order.
+   return order.Where(i=>recipe.Contains(d.Lookup("items",Json.Get(i,"id")))).Concat(order.Where(i=>!recipe.Contains(d.Lookup("items",Json.Get(i,"id"))))).ToList();
   }
   public static string PurchaseLine(DataStore d,RouteChoice c){return c.StarterName+" → "+string.Join(" → ",CorePurchaseSequence(d,c).Select(i=>d.Lookup("items",Json.Get(i,"id"))));}
   static Row Make(string name,string details,object raw,object baseline,string note){var score=Statistics.Calculate(raw);return new Row{Name=name,StarterName=details,Raw=Json.Obj(raw),Lower=score.Lower,Count=score.N,Win=score.P,GainLower=Statistics.AverageGain(raw,baseline),Note=note};}

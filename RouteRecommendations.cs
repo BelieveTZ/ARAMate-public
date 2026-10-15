@@ -7,6 +7,7 @@ namespace ConfidenceDesktop {
   public object Route,Starter,Boot;
   public object[] PreFusionRecipe=new object[0];
   public object[] FollowupCore=new object[0];
+  public int ShoePositionAfterFusion;
   public double Lower,Gain,RouteLower,RouteGain,Count;
  }
  public static class RouteRecommendations {
@@ -51,6 +52,30 @@ namespace ConfidenceDesktop {
    for(int position=1;position<=(conditional?4:3);position++){double score=value(boot,position);for(int i=0;i<core.Length;i++){int original=i+1,actual=original>=position?original+1:original;if(actual!=original)score+=value(core[i],actual)-value(core[i],original);}if(!double.IsNaN(score)&&score>bestScore){bestScore=score;best=position;}}
    if(best==0){note+="可比槽位样本不足，暂用第一件核心之后作为默认位置，不代表最佳时点。";best=2;}
    return name+"：建议第 "+best+" 件（综合位置参考）";
+  }
+  // The fused Hydra occupies slot 1; materials are purchases, not three final slots.
+  public static List<object> ConfigureHydraShoes(DataStore data,object raw,RouteChoice choice,IEnumerable<object> purchases){
+   var recipe=new HashSet<string>(SpecialRoutes.RequiredItems("终极九头蛇"));
+   var order=EquipmentRecommendations.OrderTaskPurchases(data,purchases,new[]{"终极九头蛇"});
+   var core=order.Where(i=>!recipe.Contains(data.Lookup("items",Json.Get(i,"id")))&&!EquipmentRecommendations.IsShoe(data,Json.Str(Json.Get(i,"id")))).ToArray();
+   var routeBoots=Json.Arr(Json.Get(choice.Route,"boots")).Where(b=>Json.Num(Json.Get(b,"sampleCount"))>=100&&IsBoot(data,Json.Get(b,"item"))&&!double.IsNaN(Statistics.Calculate(b).Lower)).OrderByDescending(b=>Statistics.Calculate(b).Lower).ThenByDescending(b=>Json.Num(Json.Get(b,"sampleCount"))).Select(b=>Json.Get(b,"item")).ToArray();
+   var filtered=Json.Get(Json.Get(raw,"items"),"filtered");
+   var overall=Json.Arr(Json.Get(filtered,"all")).Where(b=>Json.Num(Json.Get(b,"sampleCount"))>=100&&IsBoot(data,b)&&!double.IsNaN(Statistics.Calculate(b).Lower)).OrderByDescending(b=>Statistics.Calculate(b).Lower).ToArray();
+   var candidates=routeBoots.Length>0?routeBoots:overall;
+   object boot=candidates.FirstOrDefault()??choice.Boot;int bestPosition=2;double bestScore=double.NegativeInfinity;bool supported=false;
+   var slots=Json.Get(filtered,"slots");
+   Func<object,int,double> value=(item,slot)=>{if(slot>6)return double.NaN;string id=Json.Str(Json.Get(item,"id"));var row=Json.Arr(Json.Get(slots,slot.ToString())).FirstOrDefault(r=>Json.Str(Json.Get(r,"id"))==id);var score=Statistics.Calculate(row);return score.N>=100?score.Lower:double.NaN;};
+   foreach(var candidate in candidates)for(int position=2;position<=Math.Min(6,core.Length+2);position++){
+    double score=value(candidate,position);
+    for(int i=0;i<core.Length;i++){int original=i+2;if(original>=position)score+=value(core[i],original+1)-value(core[i],original);}
+    if(!double.IsNaN(score)&&score>bestScore){bestScore=score;bestPosition=position;boot=candidate;supported=true;}
+   }
+   choice.Boot=boot;choice.ShoePositionAfterFusion=boot==null?0:bestPosition;
+   choice.ShoeAdvice=boot==null?"鞋子：暂无有效数据":data.Lookup("items",Json.Get(boot,"id"))+"：合成后建议有效第 "+bestPosition+" 件"+(supported?"（综合位置参考）":"（时点样本不足，默认位置）");
+   choice.ShoeNote="三种九头蛇先完成并合成，占有效第一格。鞋型优先使用路线内至少100场的有效鞋类，否则使用同海克斯总体有效鞋类；比较鞋子槽位下界与实际后续核心被推迟的槽位下界变化，条件槽位至少100场。这是顺序评分，不是整套胜率。"+(supported?"":"可比槽位样本不足，沿用合成后第一件核心之前的默认位置，不代表最佳时点。");
+   order=order.Where(i=>!EquipmentRecommendations.IsShoe(data,Json.Str(Json.Get(i,"id")))).ToList();
+   if(boot!=null)order.Insert(Math.Min(order.Count,bestPosition+1),boot);
+   return order;
   }
   public static string ShoeTiming(DataStore data,object raw,object boot,object starter,out string note){
    note="鞋子建议使用同英雄、同范围、筛选后单件槽位数据，未与核心路线联合统计；不是整套购买时序的胜率。只比较同一装备ID，不合并升级鞋。";
