@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -167,10 +167,8 @@ namespace ConfidenceDesktop {
         public static double GoldArcX(CardResult card,double y){double radius=card.ArcRadius-card.ArcDepth*2/58;return card.ArcCenterX-Math.Sqrt(Math.Max(0,radius*radius-(y-card.ArcCenterY)*(y-card.ArcCenterY)));}
         public static double ArcLeft(CardResult card,double y,bool outer){double r=card.ArcRadius;return card.ArcCenterX-Math.Sqrt(Math.Max(0,r*r-(y-card.ArcCenterY)*(y-card.ArcCenterY)))-(outer?card.ArcDepth:0);}
         public static bool KeepChoices(bool sameScene,int newCount,bool header,TimeSpan age){return sameScene&&newCount<2&&age<TimeSpan.FromSeconds(header?3:1.5);}
-        public static List<Row> ReasonableSkillOrders(IEnumerable<Row> source){
-            var ranked=source.Where(r=>r.Rank>0).OrderBy(r=>r.Rank).ToList();
-            if(ranked.Count==0)return ranked;
-            return ranked.Where((row,index)=>index==0||(!double.IsNaN(row.Pick)&&row.Pick>=.10-1e-12&&row.GainLower>=0)).Take(4).ToList();
+        public static List<Row> ReasonableSkillOrders(IEnumerable<Row> source,int count=3){
+            return source.Where(r=>r.Rank>0).OrderBy(r=>r.Rank).Take(Math.Max(0,count)).ToList();
         }
         public static List<Row> NearBest(IEnumerable<Row> source){
             var ranked=source.Where(r=>r.Rank>0).ToList();if(ranked.Count==0)return ranked;

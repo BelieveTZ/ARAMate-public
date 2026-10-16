@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Linq;
@@ -63,7 +63,7 @@ namespace ConfidenceDesktop {
                 if(disposed)return;Rectangle now;IntPtr nowHandle;if(displayMode()!=mode||!allowed()||!NativeOverlay.VisibleGame(out now,out nowHandle)||nowHandle!=handle||now.Size!=area.Size||hero()!=champion||scope()!=sample||store()!=data){Hide();return;}
                 anchor=anchorPosition.Apply(anchor,area.Size,handle);
                 if(anchor.IsEmpty||group==null||group.Rows.Count==0){result=null;Hide();return;}
-                anchor.Offset(0,top);var rows=SelectionMatcher.ReasonableSkillOrders(group.Rows);if(mode==1)rows=rows.Take(1).ToList();var row=rows.FirstOrDefault();if(row==null){result=null;Hide();return;}
+                anchor.Offset(0,top);var rows=SelectionMatcher.ReasonableSkillOrders(group.Rows,mode==1?1:3);var row=rows.FirstOrDefault();if(row==null){result=null;Hide();return;}
                 result=new CardResult{Card=new Candidate{Name=row.Name},Row=row,SkillRecommendations=rows,HudSkill=true,Context="",Bounds=HudAnchor.Recommendation(anchor,area.Width,rows.Count,area.Height)};Present(result,now.Location);
             }catch{result=null;Hide();}finally{busy=false;}
         }

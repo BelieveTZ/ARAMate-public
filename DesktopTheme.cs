@@ -7,7 +7,7 @@ namespace ConfidenceDesktop {
   public static Color Line {get{return ThemeManager.Current["line"];}}
   public static Color Text {get{return ThemeManager.Current["desktop-text"];}}
   public static Color Muted {get{return ThemeManager.Current["desktop-muted"];}}
-  public static Color Accent {get{return ThemeManager.Current["gold"];}}
+  public static Color Accent {get{return ThemeManager.Current["accent-ink"];}}
   public static Color SelectedText {get{return ThemeManager.Current["selected-text"];}}
   public static Color Selected {get{return ThemeManager.Current["selected"];}}
   public static readonly Font Body=new Font("Microsoft YaHei UI",10),Strong=new Font("Microsoft YaHei UI",10,FontStyle.Bold),Title=new Font("Microsoft YaHei UI",13,FontStyle.Bold),Small=new Font("Microsoft YaHei UI",9);
@@ -24,6 +24,29 @@ namespace ConfidenceDesktop {
   public ModernComboBox(){SetStyle(ControlStyles.UserPaint|ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer,true);FlatStyle=FlatStyle.Flat;DrawMode=DrawMode.OwnerDrawFixed;ItemHeight=24;}
   protected override void OnPaint(PaintEventArgs e){e.Graphics.Clear(Parent==null?DesktopTheme.Canvas:Parent.BackColor);var r=new Rectangle(0,0,Width-1,Height-1);DesktopTheme.Box(e.Graphics,r,DesktopTheme.Surface,DesktopTheme.Line,6);TextRenderer.DrawText(e.Graphics,Text,Font,new Rectangle(10,0,Math.Max(1,Width-34),Height),Enabled?DesktopTheme.Text:DesktopTheme.Muted,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);using(var p=new Pen(DesktopTheme.Muted,1.5f))e.Graphics.DrawLines(p,new[]{new Point(Width-20,Height/2-2),new Point(Width-15,Height/2+3),new Point(Width-10,Height/2-2)});}
   protected override void OnSelectedIndexChanged(EventArgs e){Invalidate();base.OnSelectedIndexChanged(e);}protected override void OnGotFocus(EventArgs e){Invalidate();base.OnGotFocus(e);}protected override void OnLostFocus(EventArgs e){Invalidate();base.OnLostFocus(e);}
+ }
+ public class ThemeComboBox:ModernComboBox {
+  void PaintChoice(Graphics g,Rectangle bounds,int index,bool selected){
+   if(index<0||index>=ThemePalette.All.Length)return;
+   var theme=ThemePalette.All[index];
+   using(var brush=new SolidBrush(selected?DesktopTheme.Selected:DesktopTheme.Surface))g.FillRectangle(brush,bounds);
+   var swatch=new Rectangle(bounds.Left+10,bounds.Top+(bounds.Height-20)/2,20,20);
+   g.SmoothingMode=SmoothingMode.AntiAlias;
+   using(var circle=new GraphicsPath()){
+    circle.AddEllipse(swatch);var saved=g.Save();g.SetClip(circle);
+    using(var background=new SolidBrush(theme["panel"]))g.FillRectangle(background,swatch);
+    using(var accent=new SolidBrush(theme["gold"]))g.FillPolygon(accent,new[]{new Point(swatch.Left,swatch.Bottom),new Point(swatch.Right,swatch.Top),new Point(swatch.Right,swatch.Bottom)});
+    g.Restore(saved);
+   }
+   TextRenderer.DrawText(g,theme.Name,Font,new Rectangle(bounds.Left+40,bounds.Top,bounds.Width-100,bounds.Height),selected?DesktopTheme.SelectedText:DesktopTheme.Text,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.NoPrefix);
+   if(theme.Id=="piltover"){
+    var badge=new Rectangle(bounds.Right-50,bounds.Top+(bounds.Height-20)/2,42,20);
+    DesktopTheme.Box(g,badge,DesktopTheme.Selected,DesktopTheme.SelectedText,10);
+    TextRenderer.DrawText(g,"默认",DesktopTheme.Small,badge,DesktopTheme.SelectedText,TextFormatFlags.HorizontalCenter|TextFormatFlags.VerticalCenter);
+   }
+  }
+  protected override void OnPaint(PaintEventArgs e){base.OnPaint(e);PaintChoice(e.Graphics,new Rectangle(4,3,Math.Max(1,Width-34),Math.Max(1,Height-6)),SelectedIndex,false);}
+  protected override void OnDrawItem(DrawItemEventArgs e){base.OnDrawItem(e);PaintChoice(e.Graphics,e.Bounds,e.Index,(e.State&DrawItemState.Selected)!=0);}
  }
  public class InputSurface:Panel {
   readonly TextBox input;

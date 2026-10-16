@@ -24,8 +24,8 @@ namespace ConfidenceDesktop {
   }
   public static HashSet<string> Existing(RouteChoice c){return c==null?new HashSet<string>():new HashSet<string>(c.PreFusionRecipe.Concat(Json.Arr(Json.Get(c.Route,"purchaseOrder"))).Concat(c.FollowupCore).Concat(Json.Arr(Json.Get(c.Starter,"items"))).Concat(c.Boot==null?new object[0]:new[]{c.Boot}).Select(i=>Json.Str(Json.Get(i,"id"))));}
   public static bool IsShoe(DataStore d,string id){object meta;return d.Resources["items"].TryGetValue(id,out meta)&&Json.Arr(Json.Get(meta,"categories")).Any(x=>Json.Str(x)=="Boots");}
-  public static List<RatedItem> Later(DataStore d,object raw,RouteChoice c,int slot=0,IEnumerable<string> additionalExisting=null){
-   var existing=Existing(c);if(additionalExisting!=null)existing.UnionWith(additionalExisting);bool hasShoes=existing.Any(id=>IsShoe(d,id));
+  public static List<RatedItem> Later(DataStore d,object raw,RouteChoice c,int slot=0,IEnumerable<string> additionalExisting=null,string deferredCoreId=null){
+   var existing=Existing(c);if(additionalExisting!=null)existing.UnionWith(additionalExisting);if(deferredCoreId!=null)existing.Remove(deferredCoreId);bool hasShoes=existing.Any(id=>IsShoe(d,id));
    Func<RatedItem,bool> allowed=r=>{string id=Json.Str(Json.Get(r.Item,"id"));return d.Lookup("items",id)!=FusionProduct(c)&&!existing.Contains(id)&&(!hasShoes||!IsShoe(d,id));};
    object sourceRaw=raw;int sourceSlot=slot;bool usesOverallData=false,usesHeroData=false;
    var available=Ratings(d,raw,slot).Where(allowed).ToList();
@@ -50,13 +50,15 @@ namespace ConfidenceDesktop {
    var recipe=InferredRoutes.TaskRecipe(c.FusionAugment)?SpecialRoutes.RequiredItems(c.FusionAugment):new string[0];
    int occupied=sequence.Count(i=>!IsShoe(d,Json.Str(Json.Get(i,"id"))))+(shoes?1:0);
    if(recipe.Length>0&&recipe.All(names.Contains))occupied-=recipe.Length-1;
-   return Math.Min(7,occupied+1);
+   return Math.Min(5,occupied+1);
   }
   public static List<RatedItem> RecommendedLater(DataStore d,object raw,RouteChoice c,int slot){
    int first=FirstLaterSlot(d,c);if(slot<first)return new List<RatedItem>();
    var selected=new HashSet<string>();
    for(int position=first;position<=slot;position++){
     var candidates=Later(d,raw,c,position,selected);
+    var overflow=CoreOverflow(d,c);
+    if(position>=5&&position-5<overflow.Count){var item=overflow[position-5];PrependCoreItem(candidates,item,DeferredRating(d,raw,c,position,item));}
     var best=candidates.FirstOrDefault(r=>r.Grade!="X");
     if(best==null)return new List<RatedItem>();
     if(position==slot)return candidates.Where(r=>r.Grade=="S"||r.Grade=="A"||r.Grade=="B").ToList();
@@ -100,10 +102,45 @@ namespace ConfidenceDesktop {
    if(c.Boot!=null&&!already&&c.ShoePositionAfterFusion>0)core.Insert(Math.Min(core.Count,c.ShoePositionAfterFusion+1),c.Boot);
    return core;
   }
-  public static List<object> CorePurchaseSequence(DataStore d,RouteChoice c){
+  internal static List<object> FullCorePurchaseSequence(DataStore d,RouteChoice c){
    if(c==null)return new List<object>();var order=OrderTaskPurchases(d,CoreSequence(c),new[]{c.FusionAugment});
    if(c.FusionAugment=="终极九头蛇"&&c.Boot!=null&&c.ShoePositionAfterFusion>0){string boot=Json.Str(Json.Get(c.Boot,"id"));order.RemoveAll(i=>Json.Str(Json.Get(i,"id"))==boot);order.Insert(Math.Min(order.Count,c.ShoePositionAfterFusion+1),c.Boot);}
    return order;
+  }
+  // Keep route evidence intact: the four-slot limit only changes the purchase plan.
+  internal static List<object> LimitCore(DataStore d,List<object> order,IEnumerable<object> starter,IEnumerable<string> tasks,out List<object> overflow){
+   var names=tasks.Distinct().Where(InferredRoutes.TaskRecipe).ToArray();
+   var mandatory=new HashSet<string>(names.SelectMany(SpecialRoutes.RequiredItems));
+   Func<object,bool> shoe=i=>IsShoe(d,Json.Str(Json.Get(i,"id")));
+   Func<int> occupied=()=>{
+    int count=order.Count(i=>!shoe(i))+(order.Concat(starter).Any(shoe)?1:0);
+    foreach(string task in names){var recipe=SpecialRoutes.RequiredItems(task);if(recipe.All(n=>order.Any(i=>d.Lookup("items",Json.Get(i,"id"))==n)))count-=recipe.Length-1;}
+    return count;
+   };
+   overflow=new List<object>();
+   while(occupied()>4){
+    int index=order.FindLastIndex(i=>!IsShoe(d,Json.Str(Json.Get(i,"id")))&&!mandatory.Contains(d.Lookup("items",Json.Get(i,"id")))&&Buyable(d,i));
+    if(index<0)throw new InvalidOperationException("核心任务材料与鞋子超过四个成装位，无法移出普通成装。");
+    overflow.Add(order[index]);order.RemoveAt(index);
+   }
+   return order;
+  }
+  public static List<object> CoreOverflow(DataStore d,RouteChoice c){
+   if(c==null)return new List<object>();List<object> overflow;
+   LimitCore(d,FullCorePurchaseSequence(d,c),Json.Arr(Json.Get(c.Starter,"items")),new[]{c.FusionAugment},out overflow);return overflow;
+  }
+  public static List<object> CorePurchaseSequence(DataStore d,RouteChoice c){
+   if(c==null)return new List<object>();List<object> overflow;
+   return LimitCore(d,FullCorePurchaseSequence(d,c),Json.Arr(Json.Get(c.Starter,"items")),new[]{c.FusionAugment},out overflow);
+  }
+  internal static RatedItem DeferredRating(DataStore d,object raw,RouteChoice c,int slot,object item){
+   string id=Json.Str(Json.Get(item,"id"));return Later(d,raw,c,slot,deferredCoreId:id).FirstOrDefault(r=>Json.Str(Json.Get(r.Item,"id"))==id);
+  }
+  internal static void PrependCoreItem(List<RatedItem> candidates,object item,RatedItem scored=null){
+   string id=Json.Str(Json.Get(item,"id"));var row=candidates.FirstOrDefault(r=>Json.Str(Json.Get(r.Item,"id"))==id);
+   candidates.RemoveAll(r=>Json.Str(Json.Get(r.Item,"id"))==id);
+   if(row==null)row=scored??new RatedItem{Item=item,Lower=double.NaN,Gain=double.NaN};
+   row.Grade="S";candidates.Insert(0,row);
   }
   public static List<object> OrderTaskPurchases(DataStore d,IEnumerable<object> purchases,IEnumerable<string> augmentNames){
    var order=purchases.ToList();

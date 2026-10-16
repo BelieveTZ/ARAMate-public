@@ -75,7 +75,7 @@ namespace ConfidenceDesktop {
     double improvement=baseline==null?double.NaN:choice.RouteLower-Statistics.Calculate(baseline).Lower;
     result.Add(new SpecialRoute{AugmentId=id,Choice=choice,Baseline=baseline,ConditionalData=synthetic,AugmentGain=gain,Improvement=improvement});
    }
-   foreach(var special in result){EquipmentRecommendations.CompleteCore(data,special.ConditionalData,special.Choice);if(special.Choice.FusionAugment=="终极九头蛇")RouteRecommendations.ConfigureHydraShoes(data,special.ConditionalData,special.Choice,EquipmentRecommendations.CorePurchaseSequence(data,special.Choice));}
+   foreach(var special in result){EquipmentRecommendations.CompleteCore(data,special.ConditionalData,special.Choice);if(special.Choice.FusionAugment=="终极九头蛇")RouteRecommendations.ConfigureHydraShoes(data,special.ConditionalData,special.Choice,EquipmentRecommendations.FullCorePurchaseSequence(data,special.Choice));}
    return result.OrderByDescending(r=>r.Improvement).ThenBy(r=>r.AugmentId).ToList();
   }
  }

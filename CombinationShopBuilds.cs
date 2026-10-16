@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -8,6 +8,7 @@ namespace ConfidenceDesktop {
   public ShopPlan Shop;
   public object Combination;
   public object[] Starter,PurchaseOrder,FinalItems;
+  public object[] DeferredCore;
   public string[] AugmentIds;
   public string Label,MainAugmentId,Note,FallbackReason,FallbackPlan;
   public double[] Lifts;
@@ -164,7 +165,9 @@ namespace ConfidenceDesktop {
    public int MissingRoute,MissingNormal;
   }
   static LaterChoices Later(DataStore data,object raw,RouteChoice choice,string[] pair,Evidence[] evidence,SpecialRoute main,List<object> order,bool secondary=true){
-   var result=new LaterChoices();var existing=new HashSet<string>(order.Select(Id));int occupied=Occupied(data,order,pair);
+   List<object> overflow;
+   order=EquipmentRecommendations.LimitCore(data,order.ToList(),Json.Arr(Json.Get(choice.Starter,"items")),pair.Select(id=>data.Lookup("augments",id)),out overflow);
+   var result=new LaterChoices();var existing=new HashSet<string>(order.Select(Id));existing.UnionWith(overflow.Select(Id));int occupied=Occupied(data,order,pair);
    for(int slot=5;slot<=6;slot++){
     if(occupied>=slot)continue;
     List<EquipmentRecommendations.RatedItem> candidates;string preferred=null;
@@ -180,6 +183,7 @@ namespace ConfidenceDesktop {
      // Regret determines ranking and grades; no joint equipment rate is available.
      candidates=ranked.Select(r=>new EquipmentRecommendations.RatedItem{Item=Item(r.Id),Grade=LaterScoring.Grade(r.Loss-ranked[0].Loss),Lower=double.NaN,Gain=double.NaN}).Where(r=>r.Grade=="S"||r.Grade=="A"||r.Grade=="B").ToList();
     }
+    if(slot-5<overflow.Count){var item=overflow[slot-5];var scored=main==null?null:EquipmentRecommendations.DeferredRating(data,main.Choice==null?raw:main.ConditionalData,Copy(choice),slot,item);EquipmentRecommendations.PrependCoreItem(candidates,item,scored);}
     if(slot==5){result.Fifth=candidates;result.FifthPick=preferred;}else{result.Sixth=candidates;result.SixthPick=preferred;}
     if(candidates.Count>0)existing.Add(Id(candidates[0].Item));
    }
@@ -207,10 +211,10 @@ namespace ConfidenceDesktop {
    var ids=mainIndex<0?pair:new[]{pair[mainIndex],pair[1-mainIndex]};
    foreach(string id in ids){
     SpecialRoute special;if(!specials.TryGetValue(id,out special)||special.Choice==null)continue;
-    order=EquipmentRecommendations.CorePurchaseSequence(data,special.Choice);
+    order=EquipmentRecommendations.FullCorePurchaseSequence(data,special.Choice);
     if(order.Any(i=>Gear(data,Id(i)))){label=data.Lookup("augments",id);return special.Choice;}
    }
-   if(normal!=null){order=EquipmentRecommendations.CorePurchaseSequence(data,normal);if(order.Any(i=>Gear(data,Id(i)))){label="常规";return normal;}}
+   if(normal!=null){order=EquipmentRecommendations.FullCorePurchaseSequence(data,normal);if(order.Any(i=>Gear(data,Id(i)))){label="常规";return normal;}}
    throw new InvalidDataException("组合缺少可用的单海克斯及常规核心："+string.Join("-",pair));
   }
   public static List<CombinationRecommendation> Recommendations(DataStore data,int hero,object raw,RouteChoice normal,IEnumerable<SpecialRoute> specialRoutes){
@@ -246,11 +250,13 @@ namespace ConfidenceDesktop {
     string key="combo-"+string.Join("-",pair.OrderBy(id=>int.Parse(id)));
     string title=label;
     order=EquipmentRecommendations.OrderTaskPurchases(data,order,pair.Select(id=>data.Lookup("augments",id)));
+    List<object> overflow;
+    order=EquipmentRecommendations.LimitCore(data,order,Json.Arr(Json.Get(choice.Starter,"items")),pair.Select(id=>data.Lookup("augments",id)),out overflow);
     var blocks=new List<object>(new[]{ShopBuilds.Block("出门装",Json.Arr(Json.Get(choice.Starter,"items"))),ShopBuilds.Block("组合 · 购买顺序",order)}.Where(b=>b!=null));
     ShopBuilds.AddLaterBlocks(blocks,slot=>slot==5?later.Fifth:later.Sixth);
     var set=new Dictionary<string,object>{{"title",title},{"type","custom"},{"map","HA"},{"mode","any"},{"associatedChampions",new[]{hero}},{"associatedMaps",new[]{12}},{"preferredItemSlots",new object[0]},{"sortrank",3},{"startedFrom","blank"},{"uid",ShopBuilds.Uid(hero,key)},{"blocks",blocks.ToArray()}};
     var shop=new ShopPlan{Hero=hero,Key=key,Role=ShopBuilds.CombinationRole,Flow=label,Title=title,Gap=double.NaN,Set=set};
-    result.Add(new CombinationRecommendation{Shop=shop,Combination=combo,Starter=Json.Arr(Json.Get(choice.Starter,"items")),PurchaseOrder=order.ToArray(),FinalItems=FinalItems(data,order,pair),AugmentIds=pair,MainAugmentId=mainIndex<0?null:pair[mainIndex],Lifts=lifts,SecondaryChanged=changed,Note=note,FallbackReason=fallbackReason,FallbackPlan=fallbackPlan,Label=string.Join(" + ",displayPair.Select(id=>data.Lookup("augments",id))),Fifth=later.Fifth,Sixth=later.Sixth,FifthSecondaryPick=later.FifthPick,SixthSecondaryPick=later.SixthPick,MissingPrimaryRoutePicks=later.MissingRoute,MissingNormalRoutePicks=later.MissingNormal});
+    result.Add(new CombinationRecommendation{Shop=shop,Combination=combo,Starter=Json.Arr(Json.Get(choice.Starter,"items")),PurchaseOrder=order.ToArray(),FinalItems=FinalItems(data,order,pair),DeferredCore=overflow.ToArray(),AugmentIds=pair,MainAugmentId=mainIndex<0?null:pair[mainIndex],Lifts=lifts,SecondaryChanged=changed,Note=note,FallbackReason=fallbackReason,FallbackPlan=fallbackPlan,Label=string.Join(" + ",displayPair.Select(id=>data.Lookup("augments",id))),Fifth=later.Fifth,Sixth=later.Sixth,FifthSecondaryPick=later.FifthPick,SixthSecondaryPick=later.SixthPick,MissingPrimaryRoutePicks=later.MissingRoute,MissingNormalRoutePicks=later.MissingNormal});
    }
    var ranked=Json.Arr(Json.Get(raw,"augmentCombinations")).Where(combo=>IsRecommended(data,raw,combo)).Select(combo=>new{
     Row=combo,Plan=new ShopPlan{Key="combo-"+string.Join("-",Json.Arr(Json.Get(combo,"augmentIds")).Select(Json.Str).OrderBy(id=>int.Parse(id))),Set=new Dictionary<string,object>()}

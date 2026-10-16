@@ -417,6 +417,12 @@ namespace ConfidenceDesktop {
         }
         public List<Group> Groups(int id,string scope){return CachedGroups(id,scope,true);}
         public List<Group> AugmentGroups(int id,string scope){return CachedGroups(id,scope,false);}
+        // Snapshot resources are immutable after Load; all result/raw caches remain private to the new store.
+        public DataStore CreateDisplaySnapshot(){return new DataStore(){Root=Root,StatsRoot=StatsRoot,ResourceRoot=ResourceRoot,Version=Version,Date=Date,Fingerprint=Fingerprint,State=State,Resources=new Dictionary<string,Dictionary<string,object>>(Resources),Heroes=new List<Hero>(Heroes)};}
+        // Adopt only the explicitly selected hero. Background preparations never
+        // populate this store or evict the user's eight recent results.
+        public void InstallDisplayGroups(int id,string scope,List<Group> groups){var entry=HeroEntry(id,scope);lock(entry.Sync){if(entry.Display==null)entry.Display=groups;}}
+        public bool HasDisplayGroups(int id,string scope){lock(cacheLock){HeroData entry;return heroCache.TryGetValue(scope+":"+id,out entry)&&System.Threading.Volatile.Read(ref entry.Display)!=null;}}
         public List<Group> DisplayGroups(int id,string scope,bool equipment){return CachedGroups(id,scope,equipment,true);}
         List<Group> BoardGroups(string scope){
             lock(cacheLock){List<Group> cached;if(boardCache.TryGetValue(scope,out cached))return cached;
@@ -438,6 +444,7 @@ namespace ConfidenceDesktop {
             if(id==0)return BoardGroups(scope);
             var entry=HeroEntry(id,scope);
             lock(entry.Sync){
+                if(display&&entry.Display!=null)return entry.Display;
                 if(entry.Basic==null){
                     entry.Raw=Json.Obj(ReadHero(id,scope));
                     var basic=Collect(entry.Raw.Where(p=>p.Key!="items").ToDictionary(p=>p.Key,p=>p.Value));entry.CollectedCount=basic.Count;
